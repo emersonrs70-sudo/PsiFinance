@@ -1,0 +1,6 @@
+{
+  "name": "PsiFinance - Gestão Financeira para Psicoterapia",
+  "description": "Sistema especializado para controle de pagamentos, sessões, políticas de falta, emissão de recibos para convênio e Carnê-Leão em psicoterapia.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

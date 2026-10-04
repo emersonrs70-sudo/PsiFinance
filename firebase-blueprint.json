@@ -1,0 +1,99 @@
+{
+  "entities": {
+    "patient": {
+      "title": "Patient",
+      "description": "Paciente cadastrado para sessões de psicoterapia",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Identificador único do paciente"
+        },
+        "name": {
+          "type": "string",
+          "description": "Nome completo do paciente",
+          "maxLength": 120
+        },
+        "phone": {
+          "type": "string",
+          "description": "Telefone ou WhatsApp do paciente",
+          "maxLength": 30
+        },
+        "defaultFee": {
+          "type": "number",
+          "description": "Valor padrão da sessão em Reais"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Anotações administrativas e horários",
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Data de cadastro ISO string"
+        }
+      },
+      "required": ["id", "name", "defaultFee", "createdAt"]
+    },
+    "sessionEntry": {
+      "title": "SessionEntry",
+      "description": "Registro de sessão de psicoterapia realizada ou agendada",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Identificador único da sessão"
+        },
+        "patientId": {
+          "type": "string",
+          "description": "ID do paciente associado",
+          "maxLength": 128
+        },
+        "patientName": {
+          "type": "string",
+          "description": "Nome do paciente para visualização rápida",
+          "maxLength": 120
+        },
+        "date": {
+          "type": "string",
+          "description": "Data da sessão no formato YYYY-MM-DD",
+          "maxLength": 10
+        },
+        "fee": {
+          "type": "number",
+          "description": "Valor da sessão em Reais"
+        },
+        "status": {
+          "type": "string",
+          "description": "Status do pagamento: received ou pending",
+          "enum": ["received", "pending"]
+        },
+        "paymentMethod": {
+          "type": "string",
+          "description": "Forma de pagamento (PIX, Transferência, etc.)",
+          "maxLength": 50
+        },
+        "notes": {
+          "type": "string",
+          "description": "Observações sobre a sessão",
+          "maxLength": 500
+        }
+      },
+      "required": ["id", "patientId", "patientName", "date", "fee", "status"]
+    }
+  },
+  "firestore": {
+    "/patients/{patientId}": {
+      "schema": {
+        "$ref": "#/entities/patient"
+      },
+      "description": "Coleção de pacientes cadastrados na clínica"
+    },
+    "/sessions/{sessionId}": {
+      "schema": {
+        "$ref": "#/entities/sessionEntry"
+      },
+      "description": "Coleção de atendimentos e entradas financeiras"
+    }
+  }
+}
