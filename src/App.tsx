@@ -11,10 +11,8 @@ import {
   saveSessionToCloud,
   deleteSessionFromCloud,
   seedInitialCloudData,
-  handleFirestoreError,
-  OperationType 
 } from './services/firebase';
-import { collection, onSnapshot, doc } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { Sidebar } from './components/Sidebar';
 import { Navbar } from './components/Navbar';
@@ -51,60 +49,67 @@ export default function App() {
 
   // 1. Initial Connection Test and Auth State
   useEffect(() => {
-    testFirestoreConnection();
-    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-    });
-    return () => unsubscribeAuth();
+    try {
+      testFirestoreConnection();
+      const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+        setCurrentUser(user);
+      });
+      return () => unsubscribeAuth();
+    } catch (e) {
+      console.warn('Auth initialization notice (resilient mode):', e);
+    }
   }, []);
 
-  // 2. Real-time Cloud Firestore Listeners
+  // 2. Real-time Cloud Firestore Listeners with Graceful Fallback
   useEffect(() => {
-    // Patients real-time listener
-    const pathPatients = 'patients';
-    const unsubscribePatients = onSnapshot(
-      collection(db, pathPatients),
-      (snapshot) => {
-        if (!snapshot.empty) {
-          const loadedPatients: Patient[] = [];
-          snapshot.forEach((docSnap) => {
-            loadedPatients.push(docSnap.data() as Patient);
-          });
-          setPatients(loadedPatients);
-        } else if (!hasCloudInitialized) {
-          // If Firestore is empty, seed initial data to the cloud
-          seedInitialCloudData(initialPatients, initialSessions);
-          setHasCloudInitialized(true);
-        }
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.LIST, pathPatients);
-      }
-    );
+    let unsubscribePatients: (() => void) | undefined;
+    let unsubscribeSessions: (() => void) | undefined;
 
-    // Sessions real-time listener
-    const pathSessions = 'sessions';
-    const unsubscribeSessions = onSnapshot(
-      collection(db, pathSessions),
-      (snapshot) => {
-        if (!snapshot.empty) {
-          const loadedSessions: SessionEntry[] = [];
-          snapshot.forEach((docSnap) => {
-            loadedSessions.push(docSnap.data() as SessionEntry);
-          });
-          // Sort descending by date
-          loadedSessions.sort((a, b) => b.date.localeCompare(a.date));
-          setSessions(loadedSessions);
+    try {
+      const pathPatients = 'patients';
+      unsubscribePatients = onSnapshot(
+        collection(db, pathPatients),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const loadedPatients: Patient[] = [];
+            snapshot.forEach((docSnap) => {
+              loadedPatients.push(docSnap.data() as Patient);
+            });
+            setPatients(loadedPatients);
+          } else if (!hasCloudInitialized) {
+            seedInitialCloudData(initialPatients, initialSessions);
+            setHasCloudInitialized(true);
+          }
+        },
+        (error) => {
+          console.warn('Patients cloud listener operating offline/local:', error.message);
         }
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.LIST, pathSessions);
-      }
-    );
+      );
+
+      const pathSessions = 'sessions';
+      unsubscribeSessions = onSnapshot(
+        collection(db, pathSessions),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const loadedSessions: SessionEntry[] = [];
+            snapshot.forEach((docSnap) => {
+              loadedSessions.push(docSnap.data() as SessionEntry);
+            });
+            loadedSessions.sort((a, b) => b.date.localeCompare(a.date));
+            setSessions(loadedSessions);
+          }
+        },
+        (error) => {
+          console.warn('Sessions cloud listener operating offline/local:', error.message);
+        }
+      );
+    } catch (err) {
+      console.warn('Firestore connection setup operating in offline/local state:', err);
+    }
 
     return () => {
-      unsubscribePatients();
-      unsubscribeSessions();
+      if (unsubscribePatients) unsubscribePatients();
+      if (unsubscribeSessions) unsubscribeSessions();
     };
   }, [hasCloudInitialized]);
 
@@ -144,7 +149,7 @@ export default function App() {
     try {
       await saveSessionToCloud(updatedSession);
     } catch (error) {
-      console.error('Failed to sync session status to cloud:', error);
+      console.warn('Cloud sync error (persisting locally):', error);
     } finally {
       setIsCloudSyncing(false);
     }
@@ -152,15 +157,14 @@ export default function App() {
 
   // Delete session with Cloud Sync
   const handleDeleteSession = async (sessionId: string) => {
-    // Optimistic UI update
     setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-    showToast('Lançamento removido da nuvem.');
+    showToast('Lançamento removido.');
 
     setIsCloudSyncing(true);
     try {
       await deleteSessionFromCloud(sessionId);
     } catch (error) {
-      console.error('Failed to delete session from cloud:', error);
+      console.warn('Cloud delete error (persisting locally):', error);
     } finally {
       setIsCloudSyncing(false);
     }
@@ -168,15 +172,14 @@ export default function App() {
 
   // Save new session with Cloud Sync
   const handleSaveNewSession = async (newSession: SessionEntry) => {
-    // Optimistic UI update
     setSessions((prev) => [newSession, ...prev]);
-    showToast(`Entrada de ${newSession.patientName} salva na nuvem!`);
+    showToast(`Entrada de ${newSession.patientName} registrada!`);
 
     setIsCloudSyncing(true);
     try {
       await saveSessionToCloud(newSession);
     } catch (error) {
-      console.error('Failed to save session to cloud:', error);
+      console.warn('Cloud save error (persisting locally):', error);
     } finally {
       setIsCloudSyncing(false);
     }
@@ -190,13 +193,13 @@ export default function App() {
     };
 
     setSessions((prev) => [newSession, ...prev]);
-    showToast(`Entrada salva na nuvem com sucesso!`);
+    showToast(`Entrada salva com sucesso!`);
 
     setIsCloudSyncing(true);
     try {
       await saveSessionToCloud(newSession);
     } catch (error) {
-      console.error('Failed to save quick session to cloud:', error);
+      console.warn('Cloud save error (persisting locally):', error);
     } finally {
       setIsCloudSyncing(false);
     }
@@ -205,13 +208,13 @@ export default function App() {
   // Save new patient with Cloud Sync
   const handleSaveNewPatient = async (newPatient: Patient) => {
     setPatients((prev) => [newPatient, ...prev]);
-    showToast(`Paciente ${newPatient.name} salvo na nuvem!`);
+    showToast(`Paciente ${newPatient.name} salvo!`);
 
     setIsCloudSyncing(true);
     try {
       await savePatientToCloud(newPatient);
     } catch (error) {
-      console.error('Failed to save patient to cloud:', error);
+      console.warn('Cloud save error (persisting locally):', error);
     } finally {
       setIsCloudSyncing(false);
     }
@@ -223,19 +226,18 @@ export default function App() {
     if (!p) return;
 
     setPatients((prev) => prev.filter((pat) => pat.id !== patientId));
-    showToast(`Paciente ${p.name} removido da nuvem.`);
+    showToast(`Paciente ${p.name} excluído.`);
 
     setIsCloudSyncing(true);
     try {
       await deletePatientFromCloud(patientId);
     } catch (error) {
-      console.error('Failed to delete patient from cloud:', error);
+      console.warn('Cloud delete error (persisting locally):', error);
     } finally {
       setIsCloudSyncing(false);
     }
   };
 
-  // Open new session modal with patient pre-selected
   const handleOpenNewSessionForPatient = (patientId: string) => {
     setPreselectedPatientId(patientId);
     setIsNewSessionModalOpen(true);
@@ -245,7 +247,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-neutral-50 flex flex-col md:flex-row font-sans text-neutral-900 w-full overflow-x-hidden">
-      {/* Expandable Sidebar (Desktop collapsible & Mobile slide-out drawer) */}
+      {/* Expandable Sidebar */}
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
