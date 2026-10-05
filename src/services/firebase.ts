@@ -18,7 +18,7 @@ import {
   writeBatch
 } from 'firebase/firestore';
 import rawFirebaseConfig from '../../firebase-applet-config.json';
-import { Patient, SessionEntry } from '../types/finance';
+import { Patient, SessionEntry, ScheduledAppointment } from '../types/finance';
 
 // Robust configuration supporting both json file and environment variables
 const firebaseConfig = {
@@ -123,6 +123,27 @@ export async function deleteSessionFromCloud(sessionId: string): Promise<void> {
   const path = `sessions/${sessionId}`;
   try {
     await deleteDoc(doc(db, 'sessions', sessionId));
+  } catch (error) {
+    const info = handleFirestoreError(error, OperationType.DELETE, path);
+    throw new Error(JSON.stringify(info));
+  }
+}
+
+// Cloud sync services for Appointments (Agenda)
+export async function saveAppointmentToCloud(appointment: ScheduledAppointment): Promise<void> {
+  const path = `appointments/${appointment.id}`;
+  try {
+    await setDoc(doc(db, 'appointments', appointment.id), appointment);
+  } catch (error) {
+    const info = handleFirestoreError(error, OperationType.WRITE, path);
+    throw new Error(JSON.stringify(info));
+  }
+}
+
+export async function deleteAppointmentFromCloud(appointmentId: string): Promise<void> {
+  const path = `appointments/${appointmentId}`;
+  try {
+    await deleteDoc(doc(db, 'appointments', appointmentId));
   } catch (error) {
     const info = handleFirestoreError(error, OperationType.DELETE, path);
     throw new Error(JSON.stringify(info));

@@ -1,21 +1,40 @@
 import React, { useState, useMemo } from 'react';
-import { SessionEntry } from '../types/finance';
+import { SessionEntry, Patient } from '../types/finance';
 import { 
   TrendingUp, 
-  TrendingDown, 
-  BarChart2, 
-  Layers
+  Target, 
+  Calendar, 
+  Layers, 
+  DollarSign, 
+  Printer, 
+  Download, 
+  ArrowUpRight,
+  ArrowDownRight,
+  CheckCircle2,
+  Activity,
+  Sparkles,
+  Users,
+  Compass,
+  Sliders,
+  ChevronRight,
+  HelpCircle
 } from 'lucide-react';
 
 interface RevenueChartsProps {
   sessions: SessionEntry[];
+  patients?: Patient[];
 }
 
-type ChartViewMode = 'evolution' | 'comparison';
+type ReportSubTab = 'historico' | 'previsibilidade' | 'metas' | 'honorarios';
 
-export const RevenueCharts: React.FC<RevenueChartsProps> = ({ sessions }) => {
-  const [viewMode, setViewMode] = useState<ChartViewMode>('evolution');
-  const [periodRange, setPeriodRange] = useState<'6_months' | '3_months' | 'year' | 'all'>('6_months');
+export const RevenueCharts: React.FC<RevenueChartsProps> = ({ sessions, patients = [] }) => {
+  const [activeSubTab, setActiveSubTab] = useState<ReportSubTab>('historico');
+  const [selectedYear, setSelectedYear] = useState<string>('all');
+  
+  // Custom monthly goal (defaults to R$ 16.000,00, adjustable by user)
+  const [monthlyGoal, setMonthlyGoal] = useState<number>(16000);
+  const [isEditingGoal, setIsEditingGoal] = useState<boolean>(false);
+  const [tempGoalInput, setTempGoalInput] = useState<string>('16000');
 
   // Month names helper in Portuguese
   const monthNames = [
@@ -23,20 +42,17 @@ export const RevenueCharts: React.FC<RevenueChartsProps> = ({ sessions }) => {
     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
   ];
 
-  const formatMonthLabel = (ym: string) => {
-    const [y, m] = ym.split('-');
-    const mIdx = parseInt(m, 10) - 1;
-    return `${monthNames[mIdx]} / ${y}`;
+  const monthAbbrs = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+  const formatBRL = (val: number) => {
+    return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
 
-  const formatShortMonth = (ym: string) => {
-    const [y, m] = ym.split('-');
-    const mIdx = parseInt(m, 10) - 1;
-    return `${monthNames[mIdx].substring(0, 3)}/${y.slice(2)}`;
-  };
+  const now = new Date();
+  const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-  // Group all sessions by month YYYY-MM
-  const monthlyData = useMemo(() => {
+  // 1. Group all sessions chronologically by month
+  const monthlyTimeline = useMemo(() => {
     const map = new Map<string, { received: number; pending: number; countReceived: number; countTotal: number }>();
 
     sessions.forEach((s) => {
@@ -54,534 +70,976 @@ export const RevenueCharts: React.FC<RevenueChartsProps> = ({ sessions }) => {
 
     const sortedKeys = Array.from(map.keys()).sort();
 
-    return sortedKeys.map((ym) => {
+    let cumulativeReceived = 0;
+    return sortedKeys.map((ym, index) => {
       const data = map.get(ym)!;
+      const [year, monthStr] = ym.split('-');
+      const mIdx = parseInt(monthStr, 10) - 1;
+      const total = data.received + data.pending;
+      cumulativeReceived += data.received;
+
+      // Month-over-month variation
+      let momGrowth = 0;
+      if (index > 0) {
+        const prevKey = sortedKeys[index - 1];
+        const prevData = map.get(prevKey)!;
+        if (prevData.received > 0) {
+          momGrowth = Math.round(((data.received - prevData.received) / prevData.received) * 100);
+        }
+      }
+
       return {
         key: ym,
-        label: formatMonthLabel(ym),
-        shortLabel: formatShortMonth(ym),
+        year,
+        monthName: monthNames[mIdx],
+        shortLabel: `${monthAbbrs[mIdx]}/${year.slice(2)}`,
+        fullLabel: `${monthNames[mIdx]} de ${year}`,
         received: data.received,
         pending: data.pending,
-        total: data.received + data.pending,
+        total,
         countReceived: data.countReceived,
         countTotal: data.countTotal,
-        averageFee: data.countReceived > 0 ? data.received / data.countReceived : 0,
+        averageFee: data.countReceived > 0 ? Math.round(data.received / data.countReceived) : 0,
+        cumulativeReceived,
+        adherenceRate: total > 0 ? Math.round((data.received / total) * 100) : 100,
+        momGrowth,
       };
     });
   }, [sessions]);
 
-  // Sliced data based on period range
-  const filteredData = useMemo(() => {
-    if (periodRange === '3_months') {
-      return monthlyData.slice(-3);
+  // Distinct available years
+  const availableYears = useMemo(() => {
+    return Array.from(new Set(monthlyTimeline.map(m => m.year))).sort().reverse();
+  }, [monthlyTimeline]);
+
+  // Filtered timeline based on selected year
+  const filteredTimeline = useMemo(() => {
+    if (selectedYear === 'all') return monthlyTimeline;
+    return monthlyTimeline.filter(m => m.year === selectedYear);
+  }, [monthlyTimeline, selectedYear]);
+
+  // Macro KPI Calculations
+  const macroKPIs = useMemo(() => {
+    const totalReceived = filteredTimeline.reduce((acc, curr) => acc + curr.received, 0);
+    const totalPending = filteredTimeline.reduce((acc, curr) => acc + curr.pending, 0);
+    const totalSessions = filteredTimeline.reduce((acc, curr) => acc + curr.countTotal, 0);
+    const totalPaidSessions = filteredTimeline.reduce((acc, curr) => acc + curr.countReceived, 0);
+    const overallAdherence = totalSessions > 0 ? Math.round((totalPaidSessions / totalSessions) * 100) : 100;
+    const averageFee = totalPaidSessions > 0 ? Math.round(totalReceived / totalPaidSessions) : 0;
+    const peakMonth = [...filteredTimeline].sort((a, b) => b.received - a.received)[0];
+
+    return {
+      totalReceived,
+      totalPending,
+      totalSessions,
+      totalPaidSessions,
+      overallAdherence,
+      averageFee,
+      peakMonth,
+    };
+  }, [filteredTimeline]);
+
+  // Current Month Data for Metas
+  const currentMonthData = useMemo(() => {
+    return monthlyTimeline.find(m => m.key === currentYM) || monthlyTimeline[monthlyTimeline.length - 1];
+  }, [monthlyTimeline, currentYM]);
+
+  const currentMonthAchieved = currentMonthData ? currentMonthData.received : 0;
+  const goalPercentage = Math.min(100, Math.round((currentMonthAchieved / (monthlyGoal || 1)) * 100));
+  const remainingToGoal = Math.max(0, monthlyGoal - currentMonthAchieved);
+  const sessionsNeededForGoal = macroKPIs.averageFee > 0 ? Math.ceil(remainingToGoal / macroKPIs.averageFee) : 0;
+
+  // 2. OPÇÃO 1: PREVISIBILIDADE & PROJEÇÃO DE CAIXA FUTURO (FORECAST)
+  const forecastData = useMemo(() => {
+    // Determine active patient base and weekly potential
+    const activePatientCount = patients.length || 7;
+    const totalWeeklyValue = patients.reduce((acc, p) => acc + p.defaultFee, 0) || (activePatientCount * 210);
+    const averageFeePerActive = Math.round(totalWeeklyValue / activePatientCount);
+
+    // 4 weeks per month standard
+    const potential30Days100 = totalWeeklyValue * 4;
+    const potential30Days90 = Math.round(potential30Days100 * 0.90); // Realistic with minor absences
+    const potential30Days80 = Math.round(potential30Days100 * 0.80); // Conservative
+
+    // 60 days
+    const potential60Days100 = totalWeeklyValue * 8;
+    const potential60Days90 = Math.round(potential60Days100 * 0.90);
+    const potential60Days80 = Math.round(potential60Days100 * 0.80);
+
+    return {
+      activePatientCount,
+      weeklyCapacity: activePatientCount,
+      monthlyCapacitySessions: activePatientCount * 4,
+      totalWeeklyValue,
+      averageFeePerActive,
+      potential30Days100,
+      potential30Days90,
+      potential30Days80,
+      potential60Days100,
+      potential60Days90,
+      potential60Days80,
+    };
+  }, [patients]);
+
+  // 3. OPÇÃO 4: PIRÂMIDE DE HONORÁRIOS & DISTRIBUIÇÃO DE VAGAS
+  const honorariosBreakdown = useMemo(() => {
+    const list = patients.length > 0 
+      ? patients.map(p => ({ name: p.name, fee: p.defaultFee }))
+      : sessions.slice(0, 15).map(s => ({ name: s.patientName, fee: s.fee }));
+
+    // Tiers:
+    // Social / Reduzido: <= R$ 150
+    // Intermediário / Padrão: R$ 160 a R$ 220
+    // Pleno / Especialista: >= R$ 230
+    const social = list.filter(p => p.fee <= 150);
+    const standard = list.filter(p => p.fee > 150 && p.fee <= 220);
+    const premium = list.filter(p => p.fee > 220);
+
+    const totalCount = list.length || 1;
+
+    return {
+      totalPatients: list.length,
+      social: {
+        count: social.length,
+        pct: Math.round((social.length / totalCount) * 100),
+        estimatedMonthly: social.reduce((a, b) => a + b.fee * 4, 0),
+      },
+      standard: {
+        count: standard.length,
+        pct: Math.round((standard.length / totalCount) * 100),
+        estimatedMonthly: standard.reduce((a, b) => a + b.fee * 4, 0),
+      },
+      premium: {
+        count: premium.length,
+        pct: Math.round((premium.length / totalCount) * 100),
+        estimatedMonthly: premium.reduce((a, b) => a + b.fee * 4, 0),
+      },
+    };
+  }, [patients, sessions]);
+
+  // SVG Coordinates for Cumulative Growth Wave
+  const svgWidth = 600;
+  const svgHeight = 200;
+  const padX = 40;
+  const padY = 30;
+
+  const maxCumulative = Math.max(...filteredTimeline.map(m => m.cumulativeReceived), 10000);
+  const cumulativePoints = useMemo(() => {
+    if (filteredTimeline.length === 0) return [];
+    const step = (svgWidth - padX * 2) / Math.max(1, filteredTimeline.length - 1);
+    return filteredTimeline.map((m, idx) => {
+      const x = padX + idx * step;
+      const y = svgHeight - padY - (m.cumulativeReceived / maxCumulative) * (svgHeight - padY * 2);
+      return { x, y, ...m };
+    });
+  }, [filteredTimeline, svgWidth, svgHeight, padX, padY, maxCumulative]);
+
+  const cumulativePath = useMemo(() => {
+    if (cumulativePoints.length === 0) return '';
+    if (cumulativePoints.length === 1) return `M ${cumulativePoints[0].x} ${cumulativePoints[0].y}`;
+    let d = `M ${cumulativePoints[0].x} ${cumulativePoints[0].y}`;
+    for (let i = 0; i < cumulativePoints.length - 1; i++) {
+      const p0 = i > 0 ? cumulativePoints[i - 1] : cumulativePoints[i];
+      const p1 = cumulativePoints[i];
+      const p2 = cumulativePoints[i + 1];
+      const p3 = i !== cumulativePoints.length - 2 ? cumulativePoints[i + 2] : p2;
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+      d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
     }
-    if (periodRange === '6_months') {
-      return monthlyData.slice(-6);
+    return d;
+  }, [cumulativePoints]);
+
+  const cumulativeAreaPath = useMemo(() => {
+    if (!cumulativePath || cumulativePoints.length === 0) return '';
+    const lastX = cumulativePoints[cumulativePoints.length - 1].x;
+    const firstX = cumulativePoints[0].x;
+    const bottomY = svgHeight - padY;
+    return `${cumulativePath} L ${lastX} ${bottomY} L ${firstX} ${bottomY} Z`;
+  }, [cumulativePath, cumulativePoints, svgHeight, padY]);
+
+  // CSV Export utility
+  const handleExportCSV = () => {
+    const headers = ['Mês/Ano', 'Recebido (R$)', 'Pendente (R$)', 'Total (R$)', 'Atendimentos', 'Ticket Médio (R$)', 'Adimplência (%)'];
+    const rows = filteredTimeline.map(m => [
+      m.fullLabel,
+      m.received,
+      m.pending,
+      m.total,
+      m.countTotal,
+      m.averageFee,
+      `${m.adherenceRate}%`,
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `relatorio_financeiro_clinica_${selectedYear}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleSaveGoal = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = Number(tempGoalInput);
+    if (!isNaN(val) && val > 0) {
+      setMonthlyGoal(val);
+      setIsEditingGoal(false);
     }
-    if (periodRange === 'year') {
-      return monthlyData.filter(d => d.key.startsWith('2026'));
-    }
-    return monthlyData;
-  }, [monthlyData, periodRange]);
-
-  // Selected month inspection state (defaults to latest month)
-  const [selectedMonthKey, setSelectedMonthKey] = useState<string>(
-    filteredData[filteredData.length - 1]?.key || '2026-10'
-  );
-
-  const inspectedMonth = useMemo(() => {
-    return filteredData.find(d => d.key === selectedMonthKey) || filteredData[filteredData.length - 1];
-  }, [filteredData, selectedMonthKey]);
-
-  // Two months comparison state
-  const availableMonths = monthlyData.map(m => m.key);
-  const [compareMonthA, setCompareMonthA] = useState<string>(
-    availableMonths[availableMonths.length - 2] || '2026-09'
-  );
-  const [compareMonthB, setCompareMonthB] = useState<string>(
-    availableMonths[availableMonths.length - 1] || '2026-10'
-  );
-
-  const monthAData = monthlyData.find(m => m.key === compareMonthA);
-  const monthBData = monthlyData.find(m => m.key === compareMonthB);
-
-  // Overall KPIs for the selected filtered period
-  const totalPeriodReceived = filteredData.reduce((acc, d) => acc + d.received, 0);
-  const totalPeriodSessions = filteredData.reduce((acc, d) => acc + d.countReceived, 0);
-  const avgMonthlyReceived = filteredData.length > 0 ? totalPeriodReceived / filteredData.length : 0;
-  const avgTicket = totalPeriodSessions > 0 ? totalPeriodReceived / totalPeriodSessions : 0;
-
-  // Max value for SVG scale
-  const maxRevenue = Math.max(...filteredData.map(d => d.received), 1000);
+  };
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      {/* Header & Mode Switcher */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-neutral-200">
+    <div className="space-y-6">
+      {/* 1. TOP EXECUTIVE HEADER */}
+      <div className="bg-white rounded-3xl p-5 sm:p-7 border border-neutral-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-lg sm:text-xl font-bold tracking-tight text-neutral-900">
-            Comparativo de Receitas
-          </h1>
-          <p className="text-xs text-neutral-500 mt-0.5">
-            Evolução das receitas de psicoterapia
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-neutral-900">
+              Painel de Inteligência Clínica & Histórico
+            </h1>
+            <span className="text-[10px] font-bold text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded-md uppercase tracking-wider">
+              Dashboard Financeiro
+            </span>
+          </div>
+          <p className="text-xs text-neutral-500 mt-1">
+            Histórico consolidado, projeção de caixa futuro, termômetro de metas e pirâmide de honorários.
           </p>
         </div>
 
-        {/* View Mode Switcher: full-width on mobile */}
-        <div className="grid grid-cols-2 sm:flex items-center gap-1 p-1 bg-neutral-100 rounded-lg">
-          <button
-            onClick={() => setViewMode('evolution')}
-            className={`flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-medium rounded-md transition-colors cursor-pointer min-h-[38px] ${
-              viewMode === 'evolution'
-                ? 'bg-white text-neutral-900 shadow-xs font-semibold'
-                : 'text-neutral-600 hover:text-neutral-900'
-            }`}
+        {/* Global Controls & Year Switcher */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(e.target.value)}
+            className="text-xs py-2 px-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:bg-white focus:outline-none font-semibold text-neutral-800"
           >
-            <BarChart2 className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">Evolução</span>
+            <option value="all">Todo o Histórico</option>
+            {availableYears.map(y => (
+              <option key={y} value={y}>Ano {y}</option>
+            ))}
+          </select>
+
+          <button
+            onClick={handleExportCSV}
+            className="py-2 px-3 text-xs font-semibold text-neutral-700 bg-neutral-100 hover:bg-neutral-200 active:bg-neutral-300 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+            title="Exportar dados para Excel ou Contador"
+          >
+            <Download className="w-3.5 h-3.5 text-neutral-500" />
+            <span>Exportar CSV</span>
           </button>
+
           <button
-            onClick={() => setViewMode('comparison')}
-            className={`flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-medium rounded-md transition-colors cursor-pointer min-h-[38px] ${
-              viewMode === 'comparison'
-                ? 'bg-white text-neutral-900 shadow-xs font-semibold'
-                : 'text-neutral-600 hover:text-neutral-900'
-            }`}
+            onClick={() => window.print()}
+            className="py-2 px-3 text-xs font-semibold text-white bg-neutral-900 hover:bg-neutral-800 active:bg-neutral-950 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
           >
-            <Layers className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">Comparar 2 Meses</span>
+            <Printer className="w-3.5 h-3.5" />
+            <span>Imprimir Relatório</span>
           </button>
         </div>
       </div>
 
-      {viewMode === 'evolution' && (
-        <>
-          {/* Period Range Buttons (Adaptive grid for mobile) */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <span className="text-xs font-medium text-neutral-500">
-              Período Analisado:
+      {/* 2. SUB-VIEWS NAVIGATION (FOCUSED ON USER CHOICES: 1, 3, 4 + HISTÓRICO GERAL) */}
+      <div className="flex items-center gap-1.5 p-1.5 bg-neutral-200/60 rounded-2xl overflow-x-auto select-none">
+        <button
+          onClick={() => setActiveSubTab('historico')}
+          className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+            activeSubTab === 'historico'
+              ? 'bg-neutral-900 text-white shadow-xs'
+              : 'text-neutral-600 hover:text-neutral-900 hover:bg-white/50'
+          }`}
+        >
+          <Activity className="w-3.5 h-3.5" />
+          <span>Histórico Geral & Linha do Tempo</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('previsibilidade')}
+          className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+            activeSubTab === 'previsibilidade'
+              ? 'bg-neutral-900 text-white shadow-xs'
+              : 'text-neutral-600 hover:text-neutral-900 hover:bg-white/50'
+          }`}
+        >
+          <Compass className="w-3.5 h-3.5" />
+          <span>Previsibilidade & Projeção Futura</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('metas')}
+          className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+            activeSubTab === 'metas'
+              ? 'bg-neutral-900 text-white shadow-xs'
+              : 'text-neutral-600 hover:text-neutral-900 hover:bg-white/50'
+          }`}
+        >
+          <Target className="w-3.5 h-3.5" />
+          <span>Metas & Termômetro</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('honorarios')}
+          className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+            activeSubTab === 'honorarios'
+              ? 'bg-neutral-900 text-white shadow-xs'
+              : 'text-neutral-600 hover:text-neutral-900 hover:bg-white/50'
+          }`}
+        >
+          <Layers className="w-3.5 h-3.5" />
+          <span>Pirâmide de Honorários</span>
+        </button>
+      </div>
+
+      {/* 3. MACRO 4 KPI CARDS */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+        <div className="bg-white rounded-3xl p-5 border border-neutral-200/80 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-neutral-400">
+            <span className="text-[11px] font-semibold uppercase tracking-wider">
+              {selectedYear === 'all' ? 'Histórico Total' : `Recebido em ${selectedYear}`}
             </span>
-            <div className="grid grid-cols-2 sm:flex items-center gap-1 p-1 bg-neutral-100 rounded-lg">
-              {[
-                { id: '3_months', label: '3 Meses' },
-                { id: '6_months', label: '6 Meses' },
-                { id: 'year', label: 'Ano 2026' },
-                { id: 'all', label: 'Histórico' },
-              ].map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => {
-                    setPeriodRange(p.id as any);
-                    setSelectedMonthKey(filteredData[filteredData.length - 1]?.key || '2026-10');
-                  }}
-                  className={`py-1.5 px-2.5 text-xs font-medium rounded-md transition-colors cursor-pointer text-center min-h-[36px] ${
-                    periodRange === p.id
-                      ? 'bg-neutral-900 text-white font-semibold'
-                      : 'text-neutral-600 hover:text-neutral-900'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
+            <DollarSign className="w-4 h-4 text-emerald-600" />
           </div>
-
-          {/* Metric KPIs (2-col grid on mobile, 4-col on desktop) */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
-            <div className="p-3 sm:p-4 bg-white border border-neutral-200 rounded-xl shadow-xs">
-              <div className="text-[11px] sm:text-xs text-neutral-500 font-medium truncate">Total Recebido</div>
-              <div className="mt-1 text-base sm:text-2xl font-bold text-emerald-800 font-mono tabular-nums leading-tight">
-                {totalPeriodReceived.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}
-              </div>
-              <div className="mt-1 text-[10px] text-neutral-400">
-                {filteredData.length} meses
-              </div>
+          <div className="mt-3">
+            <div className="text-xl sm:text-2xl font-extrabold text-neutral-900 font-mono tabular-nums">
+              {formatBRL(macroKPIs.totalReceived)}
             </div>
-
-            <div className="p-3 sm:p-4 bg-white border border-neutral-200 rounded-xl shadow-xs">
-              <div className="text-[11px] sm:text-xs text-neutral-500 font-medium truncate">Média Mensal</div>
-              <div className="mt-1 text-base sm:text-2xl font-bold text-neutral-900 font-mono tabular-nums leading-tight">
-                {avgMonthlyReceived.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}
-              </div>
-              <div className="mt-1 text-[10px] text-neutral-400">
-                Por mês
-              </div>
-            </div>
-
-            <div className="p-3 sm:p-4 bg-white border border-neutral-200 rounded-xl shadow-xs">
-              <div className="text-[11px] sm:text-xs text-neutral-500 font-medium truncate">Sessões Realizadas</div>
-              <div className="mt-1 text-base sm:text-2xl font-bold text-neutral-900 font-mono tabular-nums leading-tight">
-                {totalPeriodSessions}
-              </div>
-              <div className="mt-1 text-[10px] text-neutral-400">
-                {(totalPeriodSessions / Math.max(1, filteredData.length)).toFixed(1)}/mês
-              </div>
-            </div>
-
-            <div className="p-3 sm:p-4 bg-white border border-neutral-200 rounded-xl shadow-xs">
-              <div className="text-[11px] sm:text-xs text-neutral-500 font-medium truncate">Ticket Médio</div>
-              <div className="mt-1 text-base sm:text-2xl font-bold text-neutral-900 font-mono tabular-nums leading-tight">
-                {avgTicket.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}
-              </div>
-              <div className="mt-1 text-[10px] text-neutral-400">
-                Por atendimento
-              </div>
-            </div>
+            <span className="text-[11px] text-neutral-500 mt-0.5 block">
+              {macroKPIs.totalPaidSessions} sessões quitadas
+            </span>
           </div>
+        </div>
 
-          {/* Interactive Chart Container */}
-          <div className="p-4 sm:p-6 bg-white border border-neutral-200 rounded-xl shadow-xs space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+        <div className="bg-white rounded-3xl p-5 border border-neutral-200/80 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-neutral-400">
+            <span className="text-[11px] font-semibold uppercase tracking-wider">
+              Taxa de Adimplência
+            </span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          </div>
+          <div className="mt-3">
+            <div className="text-xl sm:text-2xl font-extrabold text-neutral-900 font-mono tabular-nums">
+              {macroKPIs.overallAdherence}%
+            </div>
+            <span className="text-[11px] text-amber-700 mt-0.5 block font-mono">
+              {formatBRL(macroKPIs.totalPending)} a receber
+            </span>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-3xl p-5 border border-neutral-200/80 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-neutral-400">
+            <span className="text-[11px] font-semibold uppercase tracking-wider">
+              Valor Médio / Sessão
+            </span>
+            <Activity className="w-4 h-4 text-neutral-500" />
+          </div>
+          <div className="mt-3">
+            <div className="text-xl sm:text-2xl font-extrabold text-neutral-900 font-mono tabular-nums">
+              {formatBRL(macroKPIs.averageFee)}
+            </div>
+            <span className="text-[11px] text-neutral-500 mt-0.5 block">
+              Ticket médio por atendimento
+            </span>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-3xl p-5 border border-neutral-200/80 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-neutral-400">
+            <span className="text-[11px] font-semibold uppercase tracking-wider">
+              Mês Recorde
+            </span>
+            <TrendingUp className="w-4 h-4 text-neutral-900" />
+          </div>
+          <div className="mt-3">
+            <div className="text-xl sm:text-2xl font-extrabold text-neutral-900 font-mono tabular-nums truncate">
+              {macroKPIs.peakMonth ? formatBRL(macroKPIs.peakMonth.received) : 'R$ 0,00'}
+            </div>
+            <span className="text-[11px] text-neutral-500 mt-0.5 block truncate">
+              {macroKPIs.peakMonth?.fullLabel || 'Sem dados'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. ACTIVE SUB-VIEW CONTENT */}
+
+      {/* SUB-TAB 1: HISTÓRICO GERAL & LINHA DO TEMPO */}
+      {activeSubTab === 'historico' && (
+        <div className="space-y-6">
+          {/* Cumulative Trajectory Curve */}
+          <div className="bg-white rounded-3xl p-5 sm:p-7 border border-neutral-200/80 shadow-xs">
+            <div className="flex items-center justify-between pb-4 mb-4 border-b border-neutral-100">
               <div>
-                <h2 className="text-sm font-bold text-neutral-900">
-                  Evolução das Receitas Recebidas
+                <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-900">
+                  Curva de Crescimento Acumulado
                 </h2>
-                <p className="text-[11px] text-neutral-500">
-                  Toque na barra para inspecionar o detalhamento do mês
+                <span className="text-xs text-neutral-500">
+                  Evolução cumulativa do faturamento ao longo do tempo (visão macro da clínica)
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] text-neutral-400 font-semibold uppercase block">
+                  Patrimônio Arrecadado
+                </span>
+                <span className="text-sm font-bold text-neutral-900 font-mono tabular-nums">
+                  {formatBRL(macroKPIs.totalReceived)}
+                </span>
+              </div>
+            </div>
+
+            {/* SVG Cumulative Smooth Wave */}
+            <div className="relative w-full overflow-hidden">
+              <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full h-auto max-h-56 select-none">
+                <defs>
+                  <linearGradient id="cumGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#171717" stopOpacity="0.35" />
+                    <stop offset="70%" stopColor="#525252" stopOpacity="0.1" />
+                    <stop offset="100%" stopColor="#ffffff" stopOpacity="0.0" />
+                  </linearGradient>
+                </defs>
+
+                {[0.25, 0.5, 0.75, 1].map((pct) => {
+                  const y = svgHeight - padY - pct * (svgHeight - padY * 2);
+                  return (
+                    <line
+                      key={pct}
+                      x1={padX}
+                      y1={y}
+                      x2={svgWidth - padX}
+                      y2={y}
+                      stroke="#f0f0f0"
+                      strokeDasharray="2 3"
+                      strokeWidth="1"
+                    />
+                  );
+                })}
+
+                <path d={cumulativeAreaPath} fill="url(#cumGrad)" />
+                <path
+                  d={cumulativePath}
+                  fill="none"
+                  stroke="#171717"
+                  strokeWidth="2.75"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+
+                {cumulativePoints.map((p) => (
+                  <g key={p.key} className="group cursor-pointer">
+                    <circle
+                      cx={p.x}
+                      cy={p.y}
+                      r="4"
+                      fill="#ffffff"
+                      stroke="#171717"
+                      strokeWidth="2"
+                      className="transition-transform group-hover:scale-125"
+                    />
+                    <text
+                      x={p.x}
+                      y={svgHeight - 10}
+                      fontSize="10"
+                      fontWeight="600"
+                      fill="#737373"
+                      textAnchor="middle"
+                      className="font-mono"
+                    >
+                      {p.shortLabel}
+                    </text>
+                  </g>
+                ))}
+              </svg>
+            </div>
+          </div>
+
+          {/* Full Monthly Breakdown Table */}
+          <div className="bg-white rounded-3xl border border-neutral-200/80 shadow-xs overflow-hidden">
+            <div className="p-5 sm:p-6 border-b border-neutral-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-900">
+                  Detalhamento Mês a Mês
+                </h2>
+                <span className="text-xs text-neutral-500">
+                  Performance detalhada de receitas, oscilação MoM e taxas de liquidação
+                </span>
+              </div>
+              <span className="text-xs text-neutral-400 font-mono">
+                {filteredTimeline.length} períodos registrados
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-neutral-50 border-b border-neutral-100 text-neutral-500 font-semibold">
+                    <th className="py-3 px-4 sm:px-6">Período</th>
+                    <th className="py-3 px-3">Atendimentos</th>
+                    <th className="py-3 px-3 text-right">Recebido</th>
+                    <th className="py-3 px-3 text-right">A Receber</th>
+                    <th className="py-3 px-3 text-right">Total Faturado</th>
+                    <th className="py-3 px-3 text-right">Ticket Médio</th>
+                    <th className="py-3 px-3 text-right">Variação MoM</th>
+                    <th className="py-3 px-4 sm:px-6 text-right">Adimplência</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {filteredTimeline.map((m) => (
+                    <tr key={m.key} className="hover:bg-neutral-50/70 transition-colors">
+                      <td className="py-3.5 px-4 sm:px-6 font-bold text-neutral-900 whitespace-nowrap">
+                        {m.fullLabel}
+                      </td>
+                      <td className="py-3.5 px-3 text-neutral-600 font-mono">
+                        {m.countTotal} sessões
+                      </td>
+                      <td className="py-3.5 px-3 text-right font-bold text-neutral-900 font-mono tabular-nums whitespace-nowrap">
+                        {formatBRL(m.received)}
+                      </td>
+                      <td className="py-3.5 px-3 text-right font-medium text-amber-700 font-mono tabular-nums whitespace-nowrap">
+                        {m.pending > 0 ? formatBRL(m.pending) : '—'}
+                      </td>
+                      <td className="py-3.5 px-3 text-right font-semibold text-neutral-800 font-mono tabular-nums whitespace-nowrap">
+                        {formatBRL(m.total)}
+                      </td>
+                      <td className="py-3.5 px-3 text-right text-neutral-600 font-mono tabular-nums whitespace-nowrap">
+                        {formatBRL(m.averageFee)}
+                      </td>
+                      <td className="py-3.5 px-3 text-right font-mono tabular-nums whitespace-nowrap">
+                        {m.momGrowth > 0 ? (
+                          <span className="text-emerald-700 flex items-center justify-end gap-0.5">
+                            <ArrowUpRight className="w-3 h-3" />
+                            +{m.momGrowth}%
+                          </span>
+                        ) : m.momGrowth < 0 ? (
+                          <span className="text-rose-600 flex items-center justify-end gap-0.5">
+                            <ArrowDownRight className="w-3 h-3" />
+                            {m.momGrowth}%
+                          </span>
+                        ) : (
+                          <span className="text-neutral-400">0%</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 sm:px-6 text-right font-mono tabular-nums font-semibold text-neutral-900">
+                        {m.adherenceRate}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUB-TAB 2: OPÇÃO 1 - PREVISIBILIDADE & PROJEÇÃO DE CAIXA FUTURO */}
+      {activeSubTab === 'previsibilidade' && (
+        <div className="space-y-6">
+          {/* Capacity and Overview Card */}
+          <div className="bg-white rounded-3xl p-5 sm:p-7 border border-neutral-200/80 shadow-xs">
+            <div className="flex items-center gap-3 pb-4 mb-6 border-b border-neutral-100">
+              <div className="w-10 h-10 rounded-2xl bg-neutral-900 text-white flex items-center justify-center shrink-0">
+                <Compass className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-900">
+                  Previsibilidade de Faturamento (Próximos 30 e 60 Dias)
+                </h2>
+                <p className="text-xs text-neutral-500">
+                  Cálculo preditivo baseado na sua base de {forecastData.activePatientCount} pacientes ativos e no valor acordado por sessão.
                 </p>
               </div>
+            </div>
 
-              <div className="flex items-center gap-3 text-[11px] text-neutral-500">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded bg-emerald-600 inline-block" />
-                  Recebido
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-3 border-t border-dashed border-neutral-400 inline-block" />
-                  Média ({avgMonthlyReceived.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })})
-                </span>
+            {/* Scenarios Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* 30 Days Forecast */}
+              <div className="p-5 bg-neutral-50 rounded-3xl border border-neutral-200/70 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-neutral-900 block">
+                      Projeção Próximos 30 Dias
+                    </span>
+                    <span className="text-[11px] text-neutral-500">
+                      Capacidade de ~{forecastData.monthlyCapacitySessions} atendimentos no mês
+                    </span>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-neutral-900 bg-white border border-neutral-200 px-2.5 py-1 rounded-xl">
+                    4 Semanas
+                  </span>
+                </div>
+
+                <div className="space-y-2.5 pt-2">
+                  <div className="flex items-center justify-between p-3 bg-white rounded-2xl border border-neutral-200/60">
+                    <div>
+                      <span className="text-xs font-bold text-neutral-900 block">Cenário Pleno (100%)</span>
+                      <span className="text-[10px] text-neutral-400">Presença total de todos os pacientes</span>
+                    </div>
+                    <span className="text-sm font-bold text-neutral-900 font-mono tabular-nums">
+                      {formatBRL(forecastData.potential30Days100)}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 bg-emerald-50/60 rounded-2xl border border-emerald-200/60">
+                    <div>
+                      <span className="text-xs font-bold text-emerald-900 block">Cenário Realista (90%)</span>
+                      <span className="text-[10px] text-emerald-700">Margem saudável com pequenas faltas/feriados</span>
+                    </div>
+                    <span className="text-sm font-bold text-emerald-900 font-mono tabular-nums">
+                      {formatBRL(forecastData.potential30Days90)}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 bg-white rounded-2xl border border-neutral-200/60">
+                    <div>
+                      <span className="text-xs font-bold text-neutral-700 block">Cenário Conservador (80%)</span>
+                      <span className="text-[10px] text-neutral-400">Em caso de desmarcações acumuladas</span>
+                    </div>
+                    <span className="text-sm font-bold text-neutral-700 font-mono tabular-nums">
+                      {formatBRL(forecastData.potential30Days80)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 60 Days Forecast */}
+              <div className="p-5 bg-neutral-50 rounded-3xl border border-neutral-200/70 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-neutral-900 block">
+                      Projeção Próximos 60 Dias
+                    </span>
+                    <span className="text-[11px] text-neutral-500">
+                      Horizonte bimestral da clínica
+                    </span>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-neutral-900 bg-white border border-neutral-200 px-2.5 py-1 rounded-xl">
+                    8 Semanas
+                  </span>
+                </div>
+
+                <div className="space-y-2.5 pt-2">
+                  <div className="flex items-center justify-between p-3 bg-white rounded-2xl border border-neutral-200/60">
+                    <div>
+                      <span className="text-xs font-bold text-neutral-900 block">Cenário Pleno (100%)</span>
+                      <span className="text-[10px] text-neutral-400">Presença total contínua</span>
+                    </div>
+                    <span className="text-sm font-bold text-neutral-900 font-mono tabular-nums">
+                      {formatBRL(forecastData.potential60Days100)}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 bg-emerald-50/60 rounded-2xl border border-emerald-200/60">
+                    <div>
+                      <span className="text-xs font-bold text-emerald-900 block">Cenário Realista (90%)</span>
+                      <span className="text-[10px] text-emerald-700">Faturamento esperado mais provável</span>
+                    </div>
+                    <span className="text-sm font-bold text-emerald-900 font-mono tabular-nums">
+                      {formatBRL(forecastData.potential60Days90)}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 bg-white rounded-2xl border border-neutral-200/60">
+                    <div>
+                      <span className="text-xs font-bold text-neutral-700 block">Cenário Conservador (80%)</span>
+                      <span className="text-[10px] text-neutral-400">Margem mínima de segurança</span>
+                    </div>
+                    <span className="text-sm font-bold text-neutral-700 font-mono tabular-nums">
+                      {formatBRL(forecastData.potential60Days80)}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* SVG Graph Arena with 100% mobile-safe scaling */}
-            <div className="pt-3 pb-1">
-              <div className="h-52 sm:h-64 flex items-end justify-between gap-1.5 sm:gap-4 border-b border-neutral-200 px-1 sm:px-4 relative">
-                {/* Horizontal Average Guide */}
-                {maxRevenue > 0 && (
-                  <div 
-                    className="absolute left-0 right-0 border-b border-dashed border-neutral-300 pointer-events-none z-0"
-                    style={{ bottom: `${(avgMonthlyReceived / maxRevenue) * 100}%` }}
+            {/* Strategic Insight Box */}
+            <div className="mt-5 p-4 bg-white rounded-2xl border border-neutral-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <span className="text-xs font-bold text-neutral-900 block">
+                  Potencial de Expansão de Horários
+                </span>
+                <span className="text-[11px] text-neutral-500">
+                  Cada novo paciente semanal adicionado na sua base atual incrementa em média <strong>+{formatBRL(forecastData.averageFeePerActive * 4)}/mês</strong> no seu caixa.
+                </span>
+              </div>
+              <div className="text-right shrink-0">
+                <span className="text-xs font-bold text-neutral-900 font-mono">
+                  Ticket Base: {formatBRL(forecastData.averageFeePerActive)}/sessão
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUB-TAB 3: OPÇÃO 3 - PAINEL DE METAS & TERMÔMETRO FINANCEIRO */}
+      {activeSubTab === 'metas' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-3xl p-5 sm:p-7 border border-neutral-200/80 shadow-xs">
+            {/* Header + Goal Editor */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 mb-6 border-b border-neutral-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-neutral-900 text-white flex items-center justify-center shrink-0">
+                  <Target className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-900">
+                    Termômetro de Metas Financeiras
+                  </h2>
+                  <p className="text-xs text-neutral-500">
+                    Acompanhamento do objetivo mensal de faturamento e ritmo de atendimentos.
+                  </p>
+                </div>
+              </div>
+
+              {/* Editable Goal Trigger */}
+              {isEditingGoal ? (
+                <form onSubmit={handleSaveGoal} className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={tempGoalInput}
+                    onChange={(e) => setTempGoalInput(e.target.value)}
+                    className="text-xs py-1.5 px-3 bg-neutral-50 border border-neutral-300 rounded-xl w-32 font-mono font-bold"
+                    autoFocus
                   />
-                )}
+                  <button
+                    type="submit"
+                    className="py-1.5 px-3 text-xs font-semibold text-white bg-neutral-900 rounded-xl cursor-pointer"
+                  >
+                    Salvar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingGoal(false)}
+                    className="text-xs text-neutral-500 hover:text-neutral-800"
+                  >
+                    Cancelar
+                  </button>
+                </form>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <span className="text-[10px] text-neutral-400 font-semibold uppercase block">Meta Definida</span>
+                    <span className="text-sm font-bold text-neutral-900 font-mono tabular-nums">
+                      {formatBRL(monthlyGoal)}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setTempGoalInput(String(monthlyGoal));
+                      setIsEditingGoal(true);
+                    }}
+                    className="py-1.5 px-3 text-xs font-semibold text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded-xl transition-colors cursor-pointer"
+                  >
+                    Ajustar Meta
+                  </button>
+                </div>
+              )}
+            </div>
 
-                {filteredData.map((d) => {
-                  const heightPercent = Math.max(10, Math.round((d.received / maxRevenue) * 100));
-                  const isSelected = (inspectedMonth?.key === d.key);
+            {/* Giant Thermometer Card */}
+            <div className="p-6 sm:p-8 bg-neutral-950 text-white rounded-3xl relative overflow-hidden">
+              <div className="relative z-10 space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <span className="text-xs font-semibold tracking-widest text-neutral-400 uppercase block">
+                      Desempenho no Mês Atual ({currentMonthData?.monthName || 'Mês Atual'})
+                    </span>
+                    <div className="text-3xl sm:text-4xl font-extrabold font-mono tabular-nums text-white mt-1">
+                      {formatBRL(currentMonthAchieved)}
+                    </div>
+                  </div>
+                  <div className="text-left sm:text-right">
+                    <span className="text-2xl sm:text-3xl font-bold font-mono text-emerald-400">
+                      {goalPercentage}%
+                    </span>
+                    <span className="text-xs text-neutral-400 block">da meta atingida</span>
+                  </div>
+                </div>
 
+                {/* The Sleek Thermometer Bar */}
+                <div className="w-full h-4 bg-neutral-800 rounded-full overflow-hidden p-0.5 border border-neutral-700/80">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all duration-700 ease-out"
+                    style={{ width: `${goalPercentage}%` }}
+                  />
+                </div>
+
+                {/* Bottom Diagnosis */}
+                <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between text-xs text-neutral-300 gap-2 border-t border-neutral-800">
+                  {remainingToGoal > 0 ? (
+                    <span>
+                      🎯 Faltam <strong>{formatBRL(remainingToGoal)}</strong> (aprox. <strong>{sessionsNeededForGoal} atendimentos</strong>) para bater o objetivo deste mês.
+                    </span>
+                  ) : (
+                    <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4" />
+                      Parabéns! Meta do mês batida com sucesso!
+                    </span>
+                  )}
+                  <span className="text-neutral-400 font-mono">
+                    Meta: {formatBRL(monthlyGoal)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* History of Past Goals */}
+            <div className="mt-6">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-900 mb-3">
+                Histórico de Cumprimento de Metas nos Meses Anteriores
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                {monthlyTimeline.map(m => {
+                  const pct = Math.min(100, Math.round((m.received / monthlyGoal) * 100));
+                  const isMet = m.received >= monthlyGoal;
                   return (
                     <div
-                      key={d.key}
-                      onClick={() => setSelectedMonthKey(d.key)}
-                      className="flex-1 flex flex-col items-center h-full justify-end cursor-pointer relative z-10 touch-manipulation group"
+                      key={m.key}
+                      className={`p-3.5 rounded-2xl border flex flex-col justify-between ${
+                        isMet 
+                          ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900' 
+                          : 'bg-neutral-50 border-neutral-200/80 text-neutral-900'
+                      }`}
                     >
-                      {/* Bar Value on top: compact on mobile */}
-                      <div className={`text-[9px] sm:text-xs font-mono font-semibold mb-1 tabular-nums transition-colors ${
-                        isSelected ? 'text-emerald-800 font-bold' : 'text-neutral-500 group-hover:text-neutral-900'
-                      }`}>
-                        <span className="hidden sm:inline">
-                          {d.received.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}
-                        </span>
-                        <span className="sm:hidden">
-                          {Math.round(d.received / 1000)}k
+                      <div>
+                        <span className="text-xs font-bold block">{m.shortLabel}</span>
+                        <span className="text-[11px] font-mono tabular-nums block mt-0.5">
+                          {formatBRL(m.received)}
                         </span>
                       </div>
-
-                      {/* Bar Visual Pillar */}
-                      <div
-                        className={`w-full max-w-[48px] rounded-t-md transition-all duration-200 ${
-                          isSelected
-                            ? 'bg-emerald-800 ring-2 ring-emerald-500 ring-offset-1'
-                            : 'bg-emerald-600 hover:bg-emerald-700'
-                        }`}
-                        style={{ height: `${heightPercent}%` }}
-                      />
-
-                      {/* Month Label below axis */}
-                      <div className={`mt-2 text-[10px] sm:text-xs text-center truncate ${
-                        isSelected ? 'font-bold text-neutral-900' : 'text-neutral-500'
-                      }`}>
-                        {d.shortLabel.split('/')[0]}
-                      </div>
-
-                      {/* Sessions count */}
-                      <div className="text-[9px] text-neutral-400 font-mono hidden sm:block">
-                        {d.countReceived}s
+                      <div className="mt-3 flex items-center justify-between">
+                        <span className="text-[10px] font-mono font-bold">{pct}%</span>
+                        {isMet ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        ) : (
+                          <span className="w-2 h-2 rounded-full bg-neutral-300" />
+                        )}
                       </div>
                     </div>
                   );
                 })}
               </div>
             </div>
-
-            {/* Dedicated Mobile Inspection Card (Ensures ZERO tooltips clip or overlap) */}
-            {inspectedMonth && (
-              <div className="p-3 bg-neutral-50 border border-neutral-200/80 rounded-xl flex items-center justify-between gap-2">
-                <div>
-                  <div className="text-xs font-bold text-neutral-900">
-                    {inspectedMonth.label}
-                  </div>
-                  <div className="text-[11px] text-neutral-500 mt-0.5">
-                    {inspectedMonth.countReceived} atendimentos realizados · Média: {inspectedMonth.averageFee.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/sessão
-                  </div>
-                </div>
-                <div className="text-right shrink-0">
-                  <div className="text-sm sm:text-base font-bold font-mono text-emerald-800 tabular-nums">
-                    {inspectedMonth.received.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </div>
-                  {inspectedMonth.pending > 0 && (
-                    <div className="text-[10px] font-mono text-amber-700">
-                      +{inspectedMonth.pending.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} a receber
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
-
-          {/* Monthly Comparison Table (Responsive: Cards on Mobile, Table on Desktop) */}
-          <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden shadow-xs">
-            <div className="p-3 border-b border-neutral-200 bg-neutral-50 flex items-center justify-between">
-              <span className="text-xs font-bold text-neutral-800">
-                Resumo Mês a Mês
-              </span>
-              <span className="text-[11px] text-neutral-500 font-mono">
-                {filteredData.length} meses
-              </span>
-            </div>
-
-            {/* MOBILE LIST (No horizontal scroll!) */}
-            <div className="sm:hidden divide-y divide-neutral-100">
-              {filteredData.map((d, index) => {
-                const prevMonth = filteredData[index - 1];
-                const diffPercent = prevMonth && prevMonth.received > 0
-                  ? ((d.received - prevMonth.received) / prevMonth.received) * 100
-                  : null;
-
-                return (
-                  <div key={d.key} className="p-3 flex items-center justify-between gap-2">
-                    <div>
-                      <div className="font-bold text-neutral-900 text-xs">
-                        {d.label}
-                      </div>
-                      <div className="text-[11px] text-neutral-500 mt-0.5">
-                        {d.countReceived} sessões · Média: {d.averageFee.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                      </div>
-                    </div>
-
-                    <div className="text-right shrink-0">
-                      <div className="font-mono font-bold text-emerald-800 text-xs tabular-nums">
-                        {d.received.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                      </div>
-                      <div className="text-[10px] font-mono mt-0.5">
-                        {diffPercent !== null ? (
-                          <span className={diffPercent >= 0 ? 'text-emerald-700 font-semibold' : 'text-rose-600 font-semibold'}>
-                            {diffPercent >= 0 ? '+' : ''}{diffPercent.toFixed(1)}%
-                          </span>
-                        ) : (
-                          <span className="text-neutral-400">Base</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* DESKTOP TABLE */}
-            <div className="hidden sm:block overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-neutral-100/60 text-neutral-700 border-b border-neutral-200 font-semibold">
-                  <tr>
-                    <th className="py-2.5 px-4">Mês de Competência</th>
-                    <th className="py-2.5 px-4 text-right">Receita Recebida</th>
-                    <th className="py-2.5 px-4 text-center">Sessões</th>
-                    <th className="py-2.5 px-4 text-right">Média / Sessão</th>
-                    <th className="py-2.5 px-4 text-right">Variação Mensal</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-200/80">
-                  {filteredData.map((d, index) => {
-                    const prevMonth = filteredData[index - 1];
-                    const diffPercent = prevMonth && prevMonth.received > 0
-                      ? ((d.received - prevMonth.received) / prevMonth.received) * 100
-                      : null;
-
-                    return (
-                      <tr key={d.key} className="hover:bg-neutral-50/70 transition-colors">
-                        <td className="py-3 px-4 font-semibold text-neutral-900">
-                          {d.label}
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono font-bold text-emerald-800 whitespace-nowrap tabular-nums">
-                          {d.received.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        </td>
-                        <td className="py-3 px-4 text-center font-mono text-neutral-800">
-                          {d.countReceived}
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono text-neutral-700 tabular-nums">
-                          {d.averageFee.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono text-xs whitespace-nowrap">
-                          {diffPercent !== null ? (
-                            <span className={`inline-flex items-center gap-1 font-semibold ${
-                              diffPercent >= 0 ? 'text-emerald-700' : 'text-rose-600'
-                            }`}>
-                              {diffPercent >= 0 ? '+' : ''}{diffPercent.toFixed(1)}%
-                            </span>
-                          ) : (
-                            <span className="text-neutral-400">Primeiro mês</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
+        </div>
       )}
 
-      {/* Mode 2: Direct Comparison between 2 Specific Months */}
-      {viewMode === 'comparison' && (
-        <div className="space-y-4 sm:space-y-6">
-          {/* Selectors stacked cleanly on mobile */}
-          <div className="p-4 bg-white border border-neutral-200 rounded-xl space-y-3 sm:space-y-0 sm:grid sm:grid-cols-2 sm:gap-4 shadow-xs">
-            <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                Primeiro Mês (Base):
-              </label>
-              <select
-                value={compareMonthA}
-                onChange={(e) => setCompareMonthA(e.target.value)}
-                className="w-full p-2 border border-neutral-300 rounded-lg text-xs font-mono bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 min-h-[38px]"
-              >
-                {availableMonths.map((m) => (
-                  <option key={m} value={m}>
-                    {formatMonthLabel(m)}
-                  </option>
-                ))}
-              </select>
+      {/* SUB-TAB 4: OPÇÃO 4 - PIRÂMIDE DE HONORÁRIOS & DISTRIBUIÇÃO DE VAGAS */}
+      {activeSubTab === 'honorarios' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-3xl p-5 sm:p-7 border border-neutral-200/80 shadow-xs">
+            <div className="flex items-center gap-3 pb-4 mb-6 border-b border-neutral-100">
+              <div className="w-10 h-10 rounded-2xl bg-neutral-900 text-white flex items-center justify-center shrink-0">
+                <Layers className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-900">
+                  Pirâmide de Honorários & Estrutura de Vagas
+                </h2>
+                <p className="text-xs text-neutral-500">
+                  Distribuição dos valores cobrados por sessão clínica para equilíbrio financeiro e acolhimento social.
+                </p>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                Segundo Mês (Comparativo):
-              </label>
-              <select
-                value={compareMonthB}
-                onChange={(e) => setCompareMonthB(e.target.value)}
-                className="w-full p-2 border border-neutral-300 rounded-lg text-xs font-mono bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 min-h-[38px]"
-              >
-                {availableMonths.map((m) => (
-                  <option key={m} value={m}>
-                    {formatMonthLabel(m)}
-                  </option>
-                ))}
-              </select>
+            {/* 3 Tier Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Social Slot Tier */}
+              <div className="p-5 bg-neutral-50 rounded-3xl border border-neutral-200/70 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-neutral-900 uppercase tracking-wider">
+                      Vaga Social / Acolhimento
+                    </span>
+                    <span className="text-[10px] font-bold text-neutral-500 bg-white border border-neutral-200 px-2 py-0.5 rounded-md">
+                      Até R$ 150
+                    </span>
+                  </div>
+                  <div className="text-2xl font-bold text-neutral-900 font-mono mt-3">
+                    {honorariosBreakdown.social.count} pacientes
+                  </div>
+                  <span className="text-xs text-neutral-500 mt-1 block">
+                    {honorariosBreakdown.social.pct}% da sua base ativa
+                  </span>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-neutral-200/60">
+                  <span className="text-[10px] text-neutral-400 uppercase block font-semibold">Receita Mensal Estimada</span>
+                  <span className="text-sm font-bold text-neutral-900 font-mono tabular-nums">
+                    {formatBRL(honorariosBreakdown.social.estimatedMonthly)}/mês
+                  </span>
+                </div>
+              </div>
+
+              {/* Standard Slot Tier */}
+              <div className="p-5 bg-neutral-50 rounded-3xl border border-neutral-200/70 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-neutral-900 uppercase tracking-wider">
+                      Honorário Intermediário
+                    </span>
+                    <span className="text-[10px] font-bold text-neutral-500 bg-white border border-neutral-200 px-2 py-0.5 rounded-md">
+                      R$ 160 – R$ 220
+                    </span>
+                  </div>
+                  <div className="text-2xl font-bold text-neutral-900 font-mono mt-3">
+                    {honorariosBreakdown.standard.count} pacientes
+                  </div>
+                  <span className="text-xs text-neutral-500 mt-1 block">
+                    {honorariosBreakdown.standard.pct}% da sua base ativa (Núcleo principal)
+                  </span>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-neutral-200/60">
+                  <span className="text-[10px] text-neutral-400 uppercase block font-semibold">Receita Mensal Estimada</span>
+                  <span className="text-sm font-bold text-neutral-900 font-mono tabular-nums">
+                    {formatBRL(honorariosBreakdown.standard.estimatedMonthly)}/mês
+                  </span>
+                </div>
+              </div>
+
+              {/* Premium Slot Tier */}
+              <div className="p-5 bg-neutral-50 rounded-3xl border border-neutral-200/70 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-neutral-900 uppercase tracking-wider">
+                      Honorário Pleno / Especialista
+                    </span>
+                    <span className="text-[10px] font-bold text-neutral-500 bg-white border border-neutral-200 px-2 py-0.5 rounded-md">
+                      R$ 230+
+                    </span>
+                  </div>
+                  <div className="text-2xl font-bold text-neutral-900 font-mono mt-3">
+                    {honorariosBreakdown.premium.count} pacientes
+                  </div>
+                  <span className="text-xs text-neutral-500 mt-1 block">
+                    {honorariosBreakdown.premium.pct}% da sua base ativa
+                  </span>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-neutral-200/60">
+                  <span className="text-[10px] text-neutral-400 uppercase block font-semibold">Receita Mensal Estimada</span>
+                  <span className="text-sm font-bold text-neutral-900 font-mono tabular-nums">
+                    {formatBRL(honorariosBreakdown.premium.estimatedMonthly)}/mês
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Fee Optimization Simulator Box */}
+            <div className="mt-6 p-5 bg-white rounded-3xl border border-neutral-200/90 shadow-xs space-y-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-emerald-600" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-900">
+                  Simulador de Reajuste Anual de Honorários
+                </h3>
+              </div>
+              <p className="text-xs text-neutral-600 leading-relaxed">
+                Se você aplicar um reajuste inflacionário moderado de <strong>+R$ 20,00</strong> por sessão em toda a sua base de pacientes ativos, o faturamento da sua clínica terá um incremento automático de aproximadamente <strong>+{formatBRL((honorariosBreakdown.totalPatients || 1) * 20 * 4)} por mês</strong> (ou <strong>+{formatBRL((honorariosBreakdown.totalPatients || 1) * 20 * 4 * 12)} ao ano</strong>), sem necessidade de aumentar a sua carga horária de atendimentos semanais.
+              </p>
             </div>
           </div>
-
-          {monthAData && monthBData && (
-            <>
-              {(() => {
-                const diffRevenue = monthBData.received - monthAData.received;
-                const percentRevenue = monthAData.received > 0
-                  ? (diffRevenue / monthAData.received) * 100
-                  : 0;
-                const diffSessions = monthBData.countReceived - monthAData.countReceived;
-
-                return (
-                  <div className="p-4 sm:p-5 bg-white border border-neutral-200 rounded-xl space-y-4 shadow-xs">
-                    {/* Header with Delta Banner */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-neutral-100">
-                      <div>
-                        <div className="text-[11px] text-neutral-500">Resultado da Comparação</div>
-                        <div className="text-sm sm:text-base font-bold text-neutral-900">
-                          {monthAData.label} vs. {monthBData.label}
-                        </div>
-                      </div>
-
-                      <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold font-mono self-start sm:self-auto ${
-                        diffRevenue >= 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'
-                      }`}>
-                        {diffRevenue >= 0 ? <TrendingUp className="w-4 h-4 shrink-0" /> : <TrendingDown className="w-4 h-4 shrink-0" />}
-                        <span>
-                          {diffRevenue >= 0 ? '+' : ''}{diffRevenue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} ({percentRevenue >= 0 ? '+' : ''}{percentRevenue.toFixed(1)}%)
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Side-by-side cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {/* Card A */}
-                      <div className="p-3.5 bg-neutral-50 rounded-xl border border-neutral-200/80">
-                        <div className="text-xs font-bold text-neutral-700">{monthAData.label}</div>
-                        <div className="mt-1.5 text-xl sm:text-2xl font-bold font-mono text-neutral-900 tabular-nums">
-                          {monthAData.received.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        </div>
-                        <div className="mt-1.5 text-xs text-neutral-600 space-y-0.5">
-                          <div>Sessões: <strong>{monthAData.countReceived}</strong></div>
-                          <div>Média: <strong>{monthAData.averageFee.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></div>
-                        </div>
-                      </div>
-
-                      {/* Card B */}
-                      <div className="p-3.5 bg-emerald-50/50 rounded-xl border border-emerald-200/70">
-                        <div className="text-xs font-bold text-emerald-900">{monthBData.label}</div>
-                        <div className="mt-1.5 text-xl sm:text-2xl font-bold font-mono text-emerald-800 tabular-nums">
-                          {monthBData.received.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        </div>
-                        <div className="mt-1.5 text-xs text-emerald-800 space-y-0.5">
-                          <div>Sessões: <strong>{monthBData.countReceived}</strong> ({diffSessions >= 0 ? `+${diffSessions}` : diffSessions})</div>
-                          <div>Média: <strong>{monthBData.averageFee.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Proportional bars */}
-                    <div className="pt-2">
-                      <div className="text-xs font-semibold text-neutral-700 mb-2">
-                        Proporção de Faturamento:
-                      </div>
-                      {(() => {
-                        const maxVal = Math.max(monthAData.received, monthBData.received, 1);
-                        const pctA = Math.round((monthAData.received / maxVal) * 100);
-                        const pctB = Math.round((monthBData.received / maxVal) * 100);
-
-                        return (
-                          <div className="space-y-2.5">
-                            <div>
-                              <div className="flex justify-between text-xs mb-1">
-                                <span className="font-medium text-neutral-700 truncate">{monthAData.shortLabel}</span>
-                                <span className="font-mono font-bold text-neutral-900 tabular-nums">
-                                  {monthAData.received.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                </span>
-                              </div>
-                              <div className="w-full bg-neutral-100 rounded-full h-2.5 overflow-hidden">
-                                <div className="bg-neutral-600 h-2.5 rounded-full" style={{ width: `${pctA}%` }} />
-                              </div>
-                            </div>
-
-                            <div>
-                              <div className="flex justify-between text-xs mb-1">
-                                <span className="font-medium text-emerald-800 truncate">{monthBData.shortLabel}</span>
-                                <span className="font-mono font-bold text-emerald-800 tabular-nums">
-                                  {monthBData.received.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                </span>
-                              </div>
-                              <div className="w-full bg-neutral-100 rounded-full h-2.5 overflow-hidden">
-                                <div className="bg-emerald-600 h-2.5 rounded-full" style={{ width: `${pctB}%` }} />
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                );
-              })()}
-            </>
-          )}
         </div>
       )}
     </div>

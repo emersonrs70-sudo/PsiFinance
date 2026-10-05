@@ -7,7 +7,10 @@ interface NewPatientModalProps {
   onSave: (patient: Patient) => void;
 }
 
-export const NewPatientModal: React.FC<NewPatientModalProps> = ({ onClose, onSave }) => {
+export const NewPatientModal: React.FC<NewPatientModalProps> = ({
+  onClose,
+  onSave,
+}) => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [defaultFee, setDefaultFee] = useState<number>(200);
@@ -18,12 +21,12 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({ onClose, onSav
     if (!name.trim()) return;
 
     const newPatient: Patient = {
-      id: `pat-${Date.now()}`,
+      id: `p-${Date.now()}`,
       name: name.trim(),
-      phone: phone.trim() || '(11) 99999-9999',
+      phone: phone.trim(),
       defaultFee: Number(defaultFee) || 200,
       notes: notes.trim() || undefined,
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: new Date().toISOString(),
     };
 
     onSave(newPatient);
@@ -31,95 +34,103 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({ onClose, onSav
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-neutral-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl max-w-md w-full shadow-2xl overflow-hidden max-h-[92vh] flex flex-col animate-in fade-in slide-in-from-bottom duration-200">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-neutral-950/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full shadow-2xl overflow-hidden max-h-[92vh] flex flex-col animate-in fade-in slide-in-from-bottom duration-200 border border-neutral-200/80">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-neutral-200 bg-neutral-50 shrink-0">
-          <div className="flex items-center gap-2">
-            <UserPlus className="w-5 h-5 text-neutral-900" />
-            <h2 className="text-sm font-bold text-neutral-900">
-              Cadastrar Novo Paciente
-            </h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-100 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-neutral-900 text-white flex items-center justify-center">
+              <UserPlus className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-neutral-900">
+                Cadastrar Novo Paciente
+              </h2>
+              <span className="text-[10px] text-neutral-400">
+                Registro de prontuário e valor de sessão
+              </span>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-neutral-400 hover:text-neutral-700 rounded-lg cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
+            className="p-1.5 text-neutral-400 hover:text-neutral-700 rounded-xl cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Scrollable Form Body */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs sm:text-xs overflow-y-auto flex-1">
+        {/* Form Body */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
           <div>
-            <label className="block font-medium text-neutral-700 mb-1">
-              Nome do Paciente *
+            <label className="block text-xs font-semibold text-neutral-800 mb-1.5">
+              Nome Completo do Paciente
             </label>
             <input
               type="text"
-              required
-              placeholder="Ex: Carolina Mendes"
+              placeholder="Ex: Amanda Nogueira"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full p-2.5 border border-neutral-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 text-sm sm:text-xs min-h-[42px]"
+              className="w-full text-xs py-2.5 px-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900"
+              required
+              autoFocus
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block font-medium text-neutral-700 mb-1">
-                Telefone / WhatsApp
+              <label className="block text-xs font-semibold text-neutral-800 mb-1.5">
+                WhatsApp / Telefone
               </label>
               <input
-                type="text"
+                type="tel"
                 placeholder="(11) 98765-4321"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="w-full p-2.5 border border-neutral-300 rounded-lg bg-white font-mono focus:outline-none focus:ring-1 focus:ring-neutral-900 text-sm sm:text-xs min-h-[42px]"
+                className="w-full text-xs py-2 px-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 font-mono"
               />
             </div>
 
             <div>
-              <label className="block font-medium text-neutral-700 mb-1">
-                Valor Padrão da Sessão (R$) *
+              <label className="block text-xs font-semibold text-neutral-800 mb-1.5">
+                Valor Acordado (R$)
               </label>
               <input
                 type="number"
-                min="0"
-                step="10"
-                required
                 value={defaultFee}
                 onChange={(e) => setDefaultFee(Number(e.target.value))}
-                className="w-full p-2.5 border border-neutral-300 rounded-lg bg-white font-mono focus:outline-none focus:ring-1 focus:ring-neutral-900 text-sm sm:text-xs min-h-[42px]"
+                min="0"
+                step="10"
+                className="w-full text-xs py-2 px-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 font-mono font-bold"
+                required
               />
             </div>
           </div>
 
           <div>
-            <label className="block font-medium text-neutral-700 mb-1">
-              Anotações / Horário de Preferência
+            <label className="block text-xs font-semibold text-neutral-800 mb-1.5">
+              Anotações Clínicas / Horário Preferencial
             </label>
             <textarea
-              rows={2}
-              placeholder="Ex: Atendimentos às sextas 14h"
+              rows={3}
+              placeholder="Ex: Atendimento às terças 15h, recibo emitido mensalmente..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full p-2.5 border border-neutral-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 text-sm sm:text-xs"
+              className="w-full text-xs py-2.5 px-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 resize-none"
             />
           </div>
 
-          {/* Action buttons */}
-          <div className="pt-3 pb-safe flex items-center justify-end gap-2 border-t border-neutral-100">
+          {/* Action Buttons */}
+          <div className="pt-2 flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 text-xs font-medium text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded-lg cursor-pointer min-h-[42px]"
+              className="py-2.5 px-4 text-xs font-semibold text-neutral-600 hover:text-neutral-900 rounded-xl cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 text-xs font-semibold text-white bg-neutral-900 hover:bg-neutral-800 active:bg-black rounded-lg transition-colors cursor-pointer min-h-[42px]"
+              className="py-2.5 px-5 text-xs font-semibold text-white bg-neutral-900 hover:bg-neutral-800 active:bg-neutral-950 rounded-xl transition-colors cursor-pointer shadow-xs"
             >
               Salvar Paciente
             </button>

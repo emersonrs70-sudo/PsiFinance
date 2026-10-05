@@ -6,7 +6,11 @@ import {
   Search, 
   Plus, 
   Trash2, 
-  ChevronDown
+  ChevronDown,
+  Filter,
+  FileText,
+  Printer,
+  X
 } from 'lucide-react';
 
 interface SessionsLedgerProps {
@@ -30,6 +34,7 @@ export const SessionsLedger: React.FC<SessionsLedgerProps> = ({
   const [statusFilter, setStatusFilter] = useState<'all' | 'received' | 'pending'>('all');
   const [searchPatient, setSearchPatient] = useState('');
   const [showQuickForm, setShowQuickForm] = useState(false);
+  const [selectedReceiptSession, setSelectedReceiptSession] = useState<SessionEntry | null>(null);
 
   // Inline fast entry state
   const [quickPatientId, setQuickPatientId] = useState(patients[0]?.id || '');
@@ -93,399 +98,363 @@ export const SessionsLedger: React.FC<SessionsLedgerProps> = ({
 
   const totalAll = totalReceived + totalPending;
 
+  const formatBRL = (val: number) => {
+    return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  };
+
   return (
-    <div className="space-y-4 sm:space-y-6">
-      {/* Top Title & Period Switcher (Responsive, No clipping) */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-neutral-200">
-        <div>
-          <h1 className="text-lg sm:text-xl font-bold tracking-tight text-neutral-900">
-            Entradas de Sessões
-          </h1>
-          <p className="text-xs text-neutral-500 mt-0.5">
-            Registro de atendimentos e receitas
-          </p>
-        </div>
+    <div className="space-y-5">
+      {/* 1. TOP HEADER & METRIC SUMMARY CARD */}
+      <div className="bg-white rounded-3xl p-5 sm:p-7 border border-neutral-200/80 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-neutral-100">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-neutral-900">
+              Transações & Lançamentos
+            </h1>
+            <p className="text-xs text-neutral-500 mt-0.5">
+              Controle detalhado de sessões clínicas, formas de pagamento e recibos.
+            </p>
+          </div>
 
-        <div className="flex items-center gap-2 self-stretch sm:self-auto">
-          <label className="text-xs text-neutral-500 font-medium shrink-0">Mês:</label>
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            className="w-full sm:w-auto text-xs font-mono py-1.5 px-2.5 border border-neutral-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 min-h-[38px]"
-          >
-            <option value="all">Todas as Datas</option>
-            {availableMonths.map((m) => {
-              const [y, mo] = m.split('-');
-              const monthNames = [
-                'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-                'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-              ];
-              const label = `${monthNames[parseInt(mo, 10) - 1]} / ${y}`;
-              return (
-                <option key={m} value={m}>
-                  {label}
-                </option>
-              );
-            })}
-          </select>
-        </div>
-      </div>
-
-      {/* Financial Summary Cards (Grid adapts gracefully to mobile) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
-        {/* Recebido */}
-        <div className="p-3 sm:p-4 bg-white border border-neutral-200 rounded-xl shadow-xs">
-          <div className="flex items-center justify-between text-xs text-neutral-500 font-medium">
-            <span>Recebido</span>
-            <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 shrink-0" />
-          </div>
-          <div className="mt-1.5 text-lg sm:text-2xl font-bold text-neutral-900 font-mono tabular-nums leading-tight">
-            {totalReceived.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-          </div>
-          <div className="mt-1 text-[10px] sm:text-xs text-emerald-700 font-medium truncate">
-            {filteredSessions.filter((s) => s.status === 'received').length} sessões pagas
-          </div>
-        </div>
-
-        {/* A Receber */}
-        <div className="p-3 sm:p-4 bg-white border border-neutral-200 rounded-xl shadow-xs">
-          <div className="flex items-center justify-between text-xs text-neutral-500 font-medium">
-            <span>A Receber</span>
-            <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-600 shrink-0" />
-          </div>
-          <div className="mt-1.5 text-lg sm:text-2xl font-bold text-neutral-900 font-mono tabular-nums leading-tight">
-            {totalPending.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-          </div>
-          <div className="mt-1 text-[10px] sm:text-xs text-amber-700 font-medium truncate">
-            {filteredSessions.filter((s) => s.status === 'pending').length} pendentes
-          </div>
-        </div>
-
-        {/* Total Geral (Span 2 on mobile, single on desktop) */}
-        <div className="col-span-2 sm:col-span-1 p-3 sm:p-4 bg-neutral-900 text-white rounded-xl shadow-xs">
-          <div className="flex items-center justify-between text-xs text-neutral-300 font-medium">
-            <span>Total das Sessões</span>
-            <span className="font-mono text-[10px] text-neutral-400">
-              {filteredSessions.length} atendimentos
-            </span>
-          </div>
-          <div className="mt-1.5 text-lg sm:text-2xl font-bold text-white font-mono tabular-nums leading-tight">
-            {totalAll.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-          </div>
-          <div className="mt-1 text-[10px] sm:text-xs text-neutral-400 truncate">
-            Média:{' '}
-            {(totalAll / Math.max(1, filteredSessions.length)).toLocaleString('pt-BR', {
-              style: 'currency',
-              currency: 'BRL',
-            })}{' '}
-            / sessão
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Entry Box (Mobile Collapsible / Desktop Grid) */}
-      <div className="p-3.5 sm:p-4 bg-neutral-50 border border-neutral-200 rounded-xl">
-        <div className="flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => setShowQuickForm(!showQuickForm)}
-            className="flex items-center gap-1.5 text-xs font-bold text-neutral-900 cursor-pointer sm:pointer-events-none"
-          >
-            <Plus className="w-3.5 h-3.5 text-emerald-700" />
-            <span>Lançamento Rápido de Sessão</span>
-            <ChevronDown className={`w-3.5 h-3.5 text-neutral-400 transition-transform sm:hidden ${showQuickForm ? 'rotate-180' : ''}`} />
-          </button>
-
-          <button
-            onClick={onOpenNewSession}
-            className="text-[11px] font-medium text-emerald-800 hover:underline cursor-pointer"
-          >
-            Formulário Completo
-          </button>
-        </div>
-
-        {/* Form body: always visible on desktop, toggleable on mobile */}
-        <form 
-          onSubmit={handleQuickSubmit} 
-          className={`mt-3 space-y-2.5 sm:space-y-0 sm:grid sm:grid-cols-6 sm:gap-2.5 ${showQuickForm ? 'block' : 'hidden sm:grid'}`}
-        >
-          {/* Patient */}
-          <div className="sm:col-span-2">
-            <label className="block sm:hidden text-[10px] font-medium text-neutral-500 mb-0.5">Paciente</label>
-            <select
-              value={quickPatientId}
-              onChange={(e) => handlePatientSelectChange(e.target.value)}
-              className="w-full text-xs p-2 border border-neutral-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 min-h-[40px]"
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowQuickForm(!showQuickForm)}
+              className="py-2 px-3 text-xs font-semibold text-neutral-700 bg-neutral-100 hover:bg-neutral-200 active:bg-neutral-300 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
             >
-              {patients.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+              <Plus className="w-3.5 h-3.5" />
+              <span>Lançamento Rápido</span>
+            </button>
+
+            <button
+              onClick={onOpenNewSession}
+              className="py-2 px-3.5 text-xs font-semibold text-white bg-neutral-900 hover:bg-neutral-800 active:bg-neutral-950 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs whitespace-nowrap"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Nova Entrada</span>
+            </button>
           </div>
+        </div>
 
-          {/* Date & Fee in 2 cols on mobile */}
-          <div className="grid grid-cols-2 sm:contents gap-2">
-            <div>
-              <label className="block sm:hidden text-[10px] font-medium text-neutral-500 mb-0.5">Data</label>
-              <input
-                type="date"
-                value={quickDate}
-                onChange={(e) => setQuickDate(e.target.value)}
-                className="w-full text-xs p-2 border border-neutral-300 rounded-lg bg-white font-mono focus:outline-none focus:ring-1 focus:ring-neutral-900 min-h-[40px]"
-              />
-            </div>
-
-            <div>
-              <label className="block sm:hidden text-[10px] font-medium text-neutral-500 mb-0.5">Valor (R$)</label>
-              <input
-                type="number"
-                min="0"
-                step="10"
-                placeholder="R$ Valor"
-                value={quickFee}
-                onChange={(e) => setQuickFee(Number(e.target.value))}
-                className="w-full text-xs p-2 border border-neutral-300 rounded-lg bg-white font-mono focus:outline-none focus:ring-1 focus:ring-neutral-900 min-h-[40px]"
-              />
+        {/* Quick Summary Pill Row */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4">
+          <div className="p-3 bg-neutral-50 rounded-2xl border border-neutral-200/60">
+            <span className="text-[11px] text-neutral-500 font-medium">Recebidos no Período</span>
+            <div className="text-base font-bold text-neutral-900 tabular-nums">
+              {formatBRL(totalReceived)}
             </div>
           </div>
+          <div className="p-3 bg-neutral-50 rounded-2xl border border-neutral-200/60">
+            <span className="text-[11px] text-neutral-500 font-medium">A Receber (Pendentes)</span>
+            <div className="text-base font-bold text-amber-700 tabular-nums">
+              {formatBRL(totalPending)}
+            </div>
+          </div>
+          <div className="p-3 bg-neutral-50 rounded-2xl border border-neutral-200/60">
+            <span className="text-[11px] text-neutral-500 font-medium">Faturamento Estimado</span>
+            <div className="text-base font-bold text-neutral-900 tabular-nums">
+              {formatBRL(totalAll)}
+            </div>
+          </div>
+        </div>
+      </div>
 
-          {/* Status & Action */}
-          <div className="grid grid-cols-2 sm:contents gap-2">
-            <div>
-              <label className="block sm:hidden text-[10px] font-medium text-neutral-500 mb-0.5">Status</label>
+      {/* 2. INLINE FAST ENTRY FORM (COLLAPSIBLE) */}
+      {showQuickForm && (
+        <form
+          onSubmit={handleQuickSubmit}
+          className="bg-white rounded-3xl p-5 border border-neutral-900/20 shadow-sm animate-in fade-in slide-in-from-top-2 duration-200"
+        >
+          <div className="flex items-center justify-between pb-3 mb-3 border-b border-neutral-100">
+            <span className="text-xs font-bold text-neutral-900 uppercase tracking-wider">
+              Lançamento Rápido de Atendimento
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowQuickForm(false)}
+              className="text-neutral-400 hover:text-neutral-700 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 items-end">
+            <div className="sm:col-span-2">
+              <label className="block text-[11px] font-semibold text-neutral-700 mb-1">
+                Paciente
+              </label>
               <select
-                value={quickStatus}
-                onChange={(e) => setQuickStatus(e.target.value as PaymentStatus)}
-                className="w-full text-xs p-2 border border-neutral-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 min-h-[40px]"
+                value={quickPatientId}
+                onChange={(e) => handlePatientSelectChange(e.target.value)}
+                className="w-full text-xs py-2 px-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900"
+                required
               >
-                <option value="received">Recebido</option>
-                <option value="pending">A Receber</option>
+                {patients.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({formatBRL(p.defaultFee)})
+                  </option>
+                ))}
               </select>
             </div>
 
             <div>
-              <label className="block sm:hidden text-[10px] font-medium text-neutral-500 mb-0.5 invisible">Ação</label>
+              <label className="block text-[11px] font-semibold text-neutral-700 mb-1">
+                Data
+              </label>
+              <input
+                type="date"
+                value={quickDate}
+                onChange={(e) => setQuickDate(e.target.value)}
+                className="w-full text-xs py-2 px-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 font-mono"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-neutral-700 mb-1">
+                Valor (R$)
+              </label>
+              <input
+                type="number"
+                value={quickFee}
+                onChange={(e) => setQuickFee(Number(e.target.value))}
+                className="w-full text-xs py-2 px-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 font-mono font-bold"
+                required
+              />
+            </div>
+
+            <div>
               <button
                 type="submit"
-                className="w-full py-2 px-3 text-xs font-semibold text-white bg-neutral-900 hover:bg-neutral-800 active:bg-black rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1 min-h-[40px]"
+                className="w-full py-2 px-4 text-xs font-semibold text-white bg-neutral-900 hover:bg-neutral-800 rounded-xl transition-colors cursor-pointer min-h-[38px]"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Salvar</span>
+                Salvar Sessão
               </button>
             </div>
           </div>
         </form>
-      </div>
+      )}
 
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+      {/* 3. FILTERS & SEARCH BAR */}
+      <div className="bg-white rounded-2xl p-3 sm:p-4 border border-neutral-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        {/* Search */}
+        <div className="relative flex-1 max-w-sm">
+          <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Buscar por paciente..."
+            placeholder="Buscar por nome do paciente..."
             value={searchPatient}
             onChange={(e) => setSearchPatient(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-xs border border-neutral-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 min-h-[38px]"
+            className="w-full pl-9 pr-3 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900"
           />
         </div>
 
-        {/* Segmented Filter Buttons (Full touch target, no overflow) */}
-        <div className="grid grid-cols-3 gap-1 p-1 bg-neutral-100 rounded-lg shrink-0">
+        {/* Status Filter Segmented Control */}
+        <div className="flex items-center gap-1 p-1 bg-neutral-100 rounded-xl self-start md:self-auto">
           <button
             onClick={() => setStatusFilter('all')}
-            className={`py-1.5 px-2 text-xs font-medium rounded-md transition-colors cursor-pointer text-center truncate ${
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
               statusFilter === 'all'
-                ? 'bg-white text-neutral-900 shadow-xs font-semibold'
-                : 'text-neutral-600 hover:text-neutral-900'
+                ? 'bg-white text-neutral-900 shadow-xs'
+                : 'text-neutral-500 hover:text-neutral-900'
             }`}
           >
-            Todas ({filteredSessions.length})
+            Todas ({sessions.length})
           </button>
           <button
             onClick={() => setStatusFilter('received')}
-            className={`py-1.5 px-2 text-xs font-medium rounded-md transition-colors cursor-pointer text-center truncate ${
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
               statusFilter === 'received'
-                ? 'bg-white text-emerald-900 shadow-xs font-semibold'
-                : 'text-neutral-600 hover:text-neutral-900'
+                ? 'bg-white text-neutral-900 shadow-xs'
+                : 'text-neutral-500 hover:text-neutral-900'
             }`}
           >
             Recebidas
           </button>
           <button
             onClick={() => setStatusFilter('pending')}
-            className={`py-1.5 px-2 text-xs font-medium rounded-md transition-colors cursor-pointer text-center truncate ${
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
               statusFilter === 'pending'
-                ? 'bg-white text-amber-900 shadow-xs font-semibold'
-                : 'text-neutral-600 hover:text-neutral-900'
+                ? 'bg-white text-neutral-900 shadow-xs'
+                : 'text-neutral-500 hover:text-neutral-900'
             }`}
           >
             A Receber
           </button>
         </div>
+
+        {/* Month Selector */}
+        <select
+          value={selectedMonth}
+          onChange={(e) => setSelectedMonth(e.target.value)}
+          className="text-xs py-2 px-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:bg-white focus:outline-none font-medium text-neutral-800"
+        >
+          <option value="all">Todos os Meses</option>
+          {availableMonths.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
       </div>
 
-      {/* MOBILE VIEW (< sm): Clean, responsive touch cards (ZERO HORIZONTAL SCROLL) */}
-      <div className="sm:hidden space-y-2">
+      {/* 4. SESSIONS LIST (MINIMALIST & HIGH CONTRAST) */}
+      <div className="bg-white rounded-3xl border border-neutral-200/80 shadow-xs overflow-hidden">
         {filteredSessions.length === 0 ? (
-          <div className="p-8 text-center text-xs text-neutral-500 bg-white border border-neutral-200 rounded-xl">
-            Nenhuma sessão encontrada para este período.
+          <div className="py-16 text-center text-neutral-400 space-y-2">
+            <p className="text-sm font-medium">Nenhum lançamento encontrado para os filtros selecionados.</p>
+            <button
+              onClick={onOpenNewSession}
+              className="text-xs font-semibold text-neutral-900 underline underline-offset-4 cursor-pointer"
+            >
+              Registrar uma sessão agora
+            </button>
           </div>
         ) : (
-          filteredSessions.map((session) => (
-            <div
-              key={session.id}
-              className="p-3.5 bg-white border border-neutral-200 rounded-xl shadow-xs space-y-2.5"
-            >
-              {/* Top row: Name, Date & Fee */}
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="font-bold text-neutral-900 text-sm truncate">
-                    {session.patientName}
-                  </div>
-                  <div className="text-[11px] font-mono text-neutral-500 mt-0.5">
-                    {session.date.split('-').reverse().join('/')} · {session.paymentMethod || 'PIX'}
-                  </div>
-                </div>
-
-                <div className="text-right shrink-0">
-                  <div className="text-base font-bold font-mono text-neutral-900 tabular-nums">
-                    {session.fee.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </div>
-                </div>
-              </div>
-
-              {session.notes && (
-                <div className="text-[11px] text-neutral-500 bg-neutral-50 p-1.5 rounded">
-                  {session.notes}
-                </div>
-              )}
-
-              {/* Bottom row: Touch Status Toggle + Delete */}
-              <div className="flex items-center justify-between pt-1 border-t border-neutral-100">
-                <button
-                  type="button"
-                  onClick={() => onToggleStatus(session.id)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all min-h-[38px] ${
-                    session.status === 'received'
-                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/80 active:bg-emerald-100'
-                      : 'bg-amber-50 text-amber-800 border border-amber-200/80 active:bg-amber-100'
-                  }`}
+          <div className="divide-y divide-neutral-100">
+            {filteredSessions.map((session) => {
+              const isReceived = session.status === 'received';
+              return (
+                <div
+                  key={session.id}
+                  className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-neutral-50/80 transition-colors"
                 >
-                  {session.status === 'received' ? (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Recebido</span>
-                    </>
-                  ) : (
-                    <>
-                      <Clock className="w-4 h-4 text-amber-600 shrink-0" />
-                      <span>A Receber</span>
-                    </>
-                  )}
-                </button>
+                  {/* Left: Icon + Patient Info */}
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <button
+                      onClick={() => onToggleStatus(session.id)}
+                      title={isReceived ? 'Marcar como A Receber' : 'Marcar como Recebido'}
+                      className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 cursor-pointer transition-transform active:scale-95 ${
+                        isReceived
+                          ? 'bg-neutral-900 text-white'
+                          : 'bg-neutral-100 text-neutral-500 border border-neutral-300'
+                      }`}
+                    >
+                      {isReceived ? (
+                        <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                      ) : (
+                        <Clock className="w-5 h-5 text-amber-500" />
+                      )}
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={() => onDeleteSession(session.id)}
-                  className="p-2 text-neutral-400 hover:text-rose-600 active:bg-rose-50 rounded-lg transition-colors cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center"
-                  title="Excluir"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          ))
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-neutral-900 truncate">
+                          {session.patientName}
+                        </span>
+                        {session.paymentMethod && (
+                          <span className="text-[10px] font-semibold text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded-md">
+                            {session.paymentMethod}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-neutral-500 flex items-center gap-2 mt-0.5 font-mono">
+                        <span>{session.date}</span>
+                        {session.notes && (
+                          <>
+                            <span aria-hidden="true">·</span>
+                            <span className="font-sans truncate text-neutral-400 max-w-xs">{session.notes}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Value + Status Toggle + Actions */}
+                  <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 pl-13 sm:pl-0">
+                    <div className="text-right">
+                      <div className="text-base font-bold text-neutral-900 tabular-nums">
+                        {formatBRL(session.fee)}
+                      </div>
+                      <button
+                        onClick={() => onToggleStatus(session.id)}
+                        className={`text-[11px] font-semibold cursor-pointer underline underline-offset-2 ${
+                          isReceived ? 'text-emerald-700' : 'text-amber-700'
+                        }`}
+                      >
+                        {isReceived ? 'Recebido' : 'A Receber'}
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      {/* Receipt generator */}
+                      <button
+                        onClick={() => setSelectedReceiptSession(session)}
+                        className="p-2 text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 rounded-xl transition-colors cursor-pointer"
+                        title="Emitir Recibo para Convênio / Carnê-Leão"
+                      >
+                        <FileText className="w-4 h-4" />
+                      </button>
+
+                      {/* Delete */}
+                      <button
+                        onClick={() => onDeleteSession(session.id)}
+                        className="p-2 text-neutral-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                        title="Excluir lançamento"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
-      {/* DESKTOP VIEW (>= sm): Traditional Clean Data Table */}
-      <div className="hidden sm:block bg-white border border-neutral-200 rounded-xl overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-neutral-50/80 text-neutral-600 border-b border-neutral-200 font-medium">
-              <tr>
-                <th className="py-3 px-4 font-mono">Data</th>
-                <th className="py-3 px-4">Paciente</th>
-                <th className="py-3 px-4 text-right">Valor da Sessão</th>
-                <th className="py-3 px-4">Forma</th>
-                <th className="py-3 px-4 text-center">Status</th>
-                <th className="py-3 px-4 text-right">Ação</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-200/80">
-              {filteredSessions.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-10 text-center text-neutral-500">
-                    Nenhuma sessão encontrada para este período.
-                  </td>
-                </tr>
-              ) : (
-                filteredSessions.map((session) => (
-                  <tr key={session.id} className="hover:bg-neutral-50/60 transition-colors">
-                    <td className="py-3 px-4 font-mono text-neutral-700 whitespace-nowrap">
-                      {session.date.split('-').reverse().join('/')}
-                    </td>
+      {/* RECEIPT MODAL (EMISSÃO DE RECIBO CLINICO) */}
+      {selectedReceiptSession && (
+        <div className="fixed inset-0 z-50 bg-neutral-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 border border-neutral-200 shadow-2xl relative">
+            <button
+              onClick={() => setSelectedReceiptSession(null)}
+              className="absolute top-5 right-5 p-2 text-neutral-400 hover:text-neutral-700 rounded-xl cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
 
-                    <td className="py-3 px-4">
-                      <div className="font-semibold text-neutral-900">{session.patientName}</div>
-                      {session.notes && (
-                        <div className="text-[11px] text-neutral-400 truncate max-w-xs">
-                          {session.notes}
-                        </div>
-                      )}
-                    </td>
+            <div className="space-y-4">
+              <div className="border-b border-neutral-100 pb-3">
+                <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest block">
+                  Comprovante de Atendimento Psicológico
+                </span>
+                <h3 className="text-lg font-bold text-neutral-900 mt-1">
+                  Recibo de Pagamento de Psicoterapia
+                </h3>
+              </div>
 
-                    <td className="py-3 px-4 text-right font-mono font-bold text-neutral-900 whitespace-nowrap tabular-nums">
-                      {session.fee.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                    </td>
+              <div className="p-4 bg-neutral-50 rounded-2xl space-y-2 text-xs text-neutral-700 leading-relaxed">
+                <p>
+                  Recebi de <strong>{selectedReceiptSession.patientName}</strong> a importância de{' '}
+                  <strong className="text-neutral-900 font-mono">
+                    {formatBRL(selectedReceiptSession.fee)}
+                  </strong>{' '}
+                  referente à sessão de psicoterapia individual realizada em{' '}
+                  <strong className="font-mono">{selectedReceiptSession.date}</strong>.
+                </p>
+                <p className="text-[11px] text-neutral-500">
+                  Forma de Pagamento: {selectedReceiptSession.paymentMethod || 'PIX'} · Status:{' '}
+                  {selectedReceiptSession.status === 'received' ? 'Quitado' : 'Aguardando Pagamento'}
+                </p>
+              </div>
 
-                    <td className="py-3 px-4 text-neutral-600 font-mono text-[11px]">
-                      {session.paymentMethod || 'PIX'}
-                    </td>
+              <div className="pt-4 border-t border-neutral-100 flex items-center justify-between">
+                <span className="text-[11px] text-neutral-400 font-mono">
+                  ID: {selectedReceiptSession.id}
+                </span>
 
-                    <td className="py-3 px-4 text-center whitespace-nowrap">
-                      <button
-                        onClick={() => onToggleStatus(session.id)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold cursor-pointer transition-all ${
-                          session.status === 'received'
-                            ? 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200/70'
-                            : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200/70'
-                        }`}
-                        title="Clique para alternar status"
-                      >
-                        {session.status === 'received' ? (
-                          <>
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Recebido</span>
-                          </>
-                        ) : (
-                          <>
-                            <Clock className="w-3.5 h-3.5 text-amber-600" />
-                            <span>A Receber</span>
-                          </>
-                        )}
-                      </button>
-                    </td>
-
-                    <td className="py-3 px-4 text-right whitespace-nowrap">
-                      <button
-                        onClick={() => onDeleteSession(session.id)}
-                        className="p-1.5 text-neutral-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
-                        title="Excluir"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                <button
+                  onClick={() => window.print()}
+                  className="py-2.5 px-4 text-xs font-semibold text-white bg-neutral-900 hover:bg-neutral-800 rounded-xl transition-colors cursor-pointer flex items-center gap-2"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Imprimir / Salvar PDF</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

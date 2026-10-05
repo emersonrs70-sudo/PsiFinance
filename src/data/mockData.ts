@@ -1,5 +1,10 @@
 import { Patient, SessionEntry } from '../types/finance';
 
+export const demoPatientIds = new Set(['pat-1', 'pat-2', 'pat-3', 'pat-4', 'pat-5', 'pat-6', 'pat-7']);
+export const isDemoPatient = (id: string) => demoPatientIds.has(id);
+export const isDemoSession = (id: string) => id.startsWith('s-');
+export const isDemoAppointment = (id: string) => id.startsWith('apt-');
+
 export const initialPatients: Patient[] = [
   {
     id: 'pat-1',
@@ -179,3 +184,122 @@ export const initialSessions: SessionEntry[] = [
   { id: 's-105', patientId: 'pat-7', patientName: 'Beatriz Vasconcelos', date: '2026-10-07', fee: 200, status: 'received', paymentMethod: 'PIX' },
   { id: 's-106', patientId: 'pat-7', patientName: 'Beatriz Vasconcelos', date: '2026-10-14', fee: 200, status: 'pending' },
 ];
+
+export const initialAppointments = [
+  {
+    id: 'apt-01',
+    patientId: 'pat-1',
+    patientName: 'Carolina Mendes',
+    date: '2026-10-05',
+    time: '14:00',
+    durationMinutes: 50,
+    modality: 'presencial' as const,
+    status: 'confirmed' as const,
+    fee: 220,
+    notes: 'Sala 03 · Atendimento presencial individual',
+  },
+  {
+    id: 'apt-02',
+    patientId: 'pat-2',
+    patientName: 'Lucas Ferreira',
+    date: '2026-10-05',
+    time: '16:00',
+    durationMinutes: 50,
+    modality: 'online' as const,
+    status: 'scheduled' as const,
+    fee: 200,
+    notes: 'Link Google Meet enviado',
+  },
+  {
+    id: 'apt-03',
+    patientId: 'pat-4',
+    patientName: 'Gabriel Costa',
+    date: '2026-10-06',
+    time: '11:00',
+    durationMinutes: 50,
+    modality: 'presencial' as const,
+    status: 'confirmed' as const,
+    fee: 180,
+    notes: 'Sessão regular de terça-feira',
+  },
+  {
+    id: 'apt-04',
+    patientId: 'pat-6',
+    patientName: 'Rodrigo Rocha',
+    date: '2026-10-06',
+    time: '19:00',
+    durationMinutes: 50,
+    modality: 'online' as const,
+    status: 'confirmed' as const,
+    fee: 250,
+    notes: 'Atendimento noturno online',
+  },
+  {
+    id: 'apt-05',
+    patientId: 'pat-5',
+    patientName: 'Juliana Paiva',
+    date: '2026-10-07',
+    time: '18:00',
+    durationMinutes: 50,
+    modality: 'presencial' as const,
+    status: 'scheduled' as const,
+    fee: 220,
+  },
+  {
+    id: 'apt-06',
+    patientId: 'pat-7',
+    patientName: 'Beatriz Vasconcelos',
+    date: '2026-10-08',
+    time: '15:00',
+    durationMinutes: 50,
+    modality: 'online' as const,
+    status: 'scheduled' as const,
+    fee: 200,
+  },
+  {
+    id: 'apt-07',
+    patientId: 'pat-3',
+    patientName: 'Mariana Duarte',
+    date: '2026-10-10',
+    time: '10:00',
+    durationMinutes: 50,
+    modality: 'presencial' as const,
+    status: 'confirmed' as const,
+    fee: 250,
+    notes: 'Atendimento quinzenal de sábado',
+  },
+  {
+    id: 'apt-08',
+    patientId: 'pat-1',
+    patientName: 'Carolina Mendes',
+    date: '2026-10-12',
+    time: '14:00',
+    durationMinutes: 50,
+    modality: 'presencial' as const,
+    status: 'scheduled' as const,
+    fee: 220,
+  },
+  {
+    id: 'apt-09',
+    patientId: 'pat-2',
+    patientName: 'Lucas Ferreira',
+    date: '2026-10-12',
+    time: '16:00',
+    durationMinutes: 50,
+    modality: 'online' as const,
+    status: 'scheduled' as const,
+    fee: 200,
+  },
+  {
+    id: 'apt-10',
+    patientId: 'pat-4',
+    patientName: 'Gabriel Costa',
+    date: '2026-10-13',
+    time: '11:00',
+    durationMinutes: 50,
+    modality: 'presencial' as const,
+    status: 'scheduled' as const,
+    fee: 180,
+  },
+];
+
